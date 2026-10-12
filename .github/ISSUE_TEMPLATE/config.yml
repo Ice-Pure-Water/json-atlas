@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Usage help / 使用帮助
+    url: https://github.com/Ice-Pure-Water/json-atlas/blob/main/SUPPORT.md
+    about: Read the support guide before opening an issue / 提交问题前请先查看使用帮助
+  - name: Report a security vulnerability / 报告安全漏洞
+    url: https://github.com/Ice-Pure-Water/json-atlas/security/advisories/new
+    about: Send a private report; do not create a public issue / 私下提交安全报告，请勿创建公开 Issue
