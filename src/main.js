@@ -58,6 +58,7 @@ const state = {
       compareName: 'comparison.json',
       compareFormat: 'json',
       compareFormatError: '',
+      compareInitialized: false,
     },
   ],
   activeDocumentId: 1,
@@ -321,6 +322,7 @@ function addDocument() {
     compareName: 'comparison.json',
     compareFormat: 'json',
     compareFormatError: '',
+    compareInitialized: false,
   });
   switchDocument(id);
 }
@@ -528,54 +530,9 @@ function render() {
       viewer.firstElementChild,
       originalText,
       active?.originalFormat ?? state.format,
+      true,
     );
-    resultCodeView.dom.addEventListener('input', () => {
-      const text = resultCodeView.state.doc.toString();
-      const current = state.documents.find((item) => item.id === state.activeDocumentId);
-      if (!current) return;
-      const format = current.originalFormat ?? 'json';
-      current.originalText = text;
-      source.value = text;
-      state.format = format;
-      $('#format').value = format;
-      $('#input-format-label').textContent = formatLabel(format);
-      syncActiveDocument();
-      clearTimeout(originalFormatTimer);
-      if (!text.trim()) {
-        state.root = state.shown = null;
-        $('#status').textContent = '原始源码为空';
-        $('#stats').textContent = '—';
-        $('#input-bytes').textContent = '0 B';
-        return;
-      }
-      try {
-        state.root = parseInput(text, format);
-        state.shown = state.expand
-          ? expandNested(state.root, Number($('#depth').value) || 25)
-          : state.root;
-        $('#status').textContent = '原始源码已同步';
-        $('#stats').textContent =
-          `${countNodes(state.shown).toLocaleString()} 个节点 · ${new Blob([text]).size.toLocaleString()} 字节`;
-        const documentId = current.id;
-        originalFormatTimer = setTimeout(() => {
-          if (
-            state.activeDocumentId !== documentId ||
-            current.originalText !== resultCodeView?.state.doc.toString()
-          )
-            return;
-          try {
-            formatCurrentDocument();
-          } catch {
-            return;
-          }
-          $('#input-bytes').textContent = `${new Blob([source.value]).size.toLocaleString()} B`;
-        }, 800);
-      } catch (error) {
-        $('#status').textContent = error.message;
-      }
-      $('#input-bytes').textContent = `${new Blob([text]).size.toLocaleString()} B`;
-    });
-    $('#status').textContent = '最初输入的源码';
+    $('#status').textContent = '原始输入 · 只读';
     $('#stats').textContent = `${new Blob([originalText]).size.toLocaleString()} 字节`;
     $('#input-bytes').textContent = `${new Blob([source.value]).size.toLocaleString()} B`;
     return;
@@ -585,18 +542,16 @@ function render() {
     resultCodeView.dom.addEventListener('input', () => {
       const text = resultCodeView.state.doc.toString();
       source.value = text;
-      state.format = 'json';
-      $('#format').value = 'json';
-      $('#input-format-label').textContent = 'JSON';
-      $('#input-name').textContent = formattedName($('#input-name').textContent);
+      setSourceLanguage(state.format);
+      $('#input-format-label').textContent = formatLabel(state.format);
       const active = state.documents.find((item) => item.id === state.activeDocumentId);
       if (active) {
         active.text = text;
-        active.format = 'json';
+        active.format = state.format;
       }
       syncActiveDocument();
       try {
-        state.root = parseInput(text, 'json');
+        state.root = parseInput(text, state.format);
         state.shown = state.expand
           ? expandNested(state.root, Number($('#depth').value) || 25)
           : state.root;
@@ -604,7 +559,9 @@ function render() {
         $('#stats').textContent =
           `${countNodes(state.shown).toLocaleString()} 个节点 · ${new Blob([text]).size.toLocaleString()} 字节`;
       } catch (error) {
+        state.root = state.shown = null;
         $('#status').textContent = error.message;
+        $('#stats').textContent = '—';
       }
       $('#input-bytes').textContent = `${new Blob([text]).size.toLocaleString()} B`;
     });
@@ -667,14 +624,14 @@ function render() {
             }
           },
           onChange: (content) => {
-            const text = content.text ?? losslessParser.stringify(content.json, null, 2);
-            source.value = text;
-            $('#input-name').textContent = 'edited.json';
-            state.format = 'json';
-            $('#format').value = 'json';
-            $('#input-format-label').textContent = formatLabel('json');
             try {
-              state.root = parseInput(text, 'json');
+              const jsonText = content.text ?? losslessParser.stringify(content.json, null, 2);
+              const editedNode = parseInput(jsonText, 'json');
+              const text = serializeNode(editedNode, state.format);
+              source.value = text;
+              updateInputExtension(state.format);
+              $('#input-format-label').textContent = formatLabel(state.format);
+              state.root = parseInput(text, state.format);
               state.shown = state.expand
                 ? expandNested(state.root, Number($('#depth').value) || 25)
                 : state.root;
@@ -683,8 +640,10 @@ function render() {
                 `${countNodes(state.shown).toLocaleString()} 个节点 · ${new Blob([stringify(state.shown)]).size.toLocaleString()} 字节`;
               $('#input-bytes').textContent = `${new Blob([text]).size.toLocaleString()} B`;
               syncActiveDocument();
-            } catch {
+            } catch (error) {
+              state.root = state.shown = null;
               $('#status').textContent = '源码编辑中…';
+              $('#stats').textContent = '—';
             }
           },
         },
@@ -732,8 +691,18 @@ function pathForPart(part) {
 }
 function parseAndRender() {
   const text = source.value;
-  if (!text.trim()) return;
   syncActiveDocument();
+  if (!text.trim()) {
+    state.root = state.shown = null;
+    state.selected = '$';
+    state.query = '';
+    if (state.mode === 'compare') {
+      render();
+      return;
+    }
+    resetResultView();
+    return;
+  }
   try {
     const root = parseInput(text, state.format);
     state.root = root;
@@ -742,10 +711,20 @@ function parseAndRender() {
     state.query = $('#search').value;
     render();
   } catch (error) {
+    state.root = state.shown = null;
     $('#status').textContent = '解析失败';
+    jsonEditor?.destroy();
+    jsonEditor = null;
+    resultCodeView?.destroy();
+    resultCodeView = null;
+    dataTable?.destroy();
+    dataTable = null;
+    graphCleanup?.();
+    graphCleanup = null;
     viewer.className = 'viewer error-view';
     viewer.innerHTML = `<div class="error-card"><strong>无法解析输入</strong><pre>${escapeHtml(error.message)}</pre><span>请检查所选格式、引号和括号是否匹配。</span></div>`;
     $('#stats').textContent = '—';
+    $('#input-bytes').textContent = `${new Blob([text]).size.toLocaleString()} B`;
   }
 }
 function download(name, value, type = 'application/json;charset=utf-8') {
@@ -1002,9 +981,9 @@ function clearDocument() {
   if (active) {
     active.text = '';
     active.originalText = '';
+    active.originalFormat = state.format;
   }
-  if (state.mode === 'compare') render();
-  else resetResultView();
+  parseAndRender();
   renderDocumentTabs();
 }
 $('#clear-input').addEventListener('click', clearDocument);
@@ -1050,6 +1029,15 @@ $('#download-output').addEventListener(
 $('#compare-toggle').addEventListener('click', () => {
   if (state.mode !== 'compare') state.lastDataMode = state.mode;
   const active = state.documents.find((item) => item.id === state.activeDocumentId);
+  if (active && !active.compareInitialized) {
+    active.compareText = source.value;
+    active.compareOriginalText = source.value;
+    active.compareFormat = state.format;
+    active.compareName = `comparison.${extensionForFormat(state.format)}`;
+    active.compareInitialized = true;
+    comparisonSource.value = source.value;
+    $('#compare-name').textContent = active.compareName;
+  }
   if (active && !active.compareText.trim()) active.compareFormat = state.format;
   $('#compare-format-label').textContent = formatLabel(state.format);
   setCompareLanguage(state.format);
@@ -1088,6 +1076,7 @@ $('#compare-file-input').addEventListener('change', async (event) => {
     active.compareName = $('#compare-name').textContent;
     active.compareFormat = compareError ? importedFormat : state.format;
     active.compareFormatError = compareError;
+    active.compareInitialized = true;
     setCompareLanguage(active.compareFormat);
     $('#compare-format-label').textContent = formatLabel(state.format);
   }
@@ -1113,6 +1102,7 @@ $('#clear-compare').addEventListener('click', () => {
     active.compareOriginalText = '';
     active.compareFormat = state.format;
     active.compareFormatError = '';
+    active.compareInitialized = true;
   }
   $('#compare-bytes').textContent = '等待输入';
   scheduleDiff();

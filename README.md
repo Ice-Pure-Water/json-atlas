@@ -42,10 +42,10 @@ The public demo is hosted on GitHub Pages: <https://ice-pure-water.github.io/jso
 1. Paste data into the editor, load the example, or import a local file. Imported file extensions select the input format.
 2. The editor formats valid input automatically. Choose another format in the format selector to convert the current document where conversion is supported.
 3. Switch among the graph, tree, table, path, formatted source, and original source views. The graph supports horizontal and vertical layouts; click a nested value to open its card and click that card's header to return to its parent.
-4. Open **比较文档** to enter a second document. It uses the current document's format. The right pane displays the merged result and highlights changes; editing either source updates the comparison.
+4. Open **比较文档** to compare another document. On first open, the current document is copied into the comparison editor as a starting point; replace or edit it to see differences. It follows the current document's format. The right pane displays the merged result and highlights changes; scrolling across all three panes stays synchronized.
 5. Open **转换格式** for compact JSON, sorted JSON, CSV, YAML, TOML, or TypeScript output.
 
-The original source view preserves the text as it was first entered or imported. The formatted editor is the working copy. Clearing a document clears both its working copy and original-source snapshot.
+The original source view is read-only and preserves the text as it was first entered or imported. The formatted editor is the working copy. Clearing a document clears both its working copy and original-source snapshot.
 
 ## Supported format behavior
 
@@ -144,10 +144,10 @@ npm run preview # 本地预览生产构建
 1. 在编辑器粘贴数据、载入示例或导入本地文件。导入时根据文件扩展名选择输入格式。
 2. 有效输入会自动格式化。也可以在格式选择器中选择其他格式，对当前文档进行支持范围内的转换。
 3. 在关系图、树形、表格、路径、格式化源码和原始源码视图间切换。关系图支持横向和纵向布局；点击嵌套值进入下级卡片，点击卡片表头返回父级。
-4. 点击**比较文档**输入第二份文档。对比格式跟随当前文档。右侧显示合并后的结构并标出差异；编辑任一侧后会自动更新比较结果。
+4. 点击**比较文档**对照另一份文档。首次打开时，会将当前文档复制到对比编辑区作为起点；随后可直接替换或修改内容查看差异。对比格式跟随当前文档。右侧显示合并后的结构并标出差异；三个区域支持滚动同步。
 5. 点击**转换格式**，可生成压缩 JSON、键排序后的 JSON、CSV、YAML、TOML 或 TypeScript 类型。
 
-原始源码视图保留首次输入或导入的内容；格式化编辑区是当前工作副本。清空文档会同时清除工作副本和原始源码快照。
+原始源码视图只读，并保留首次输入或导入的内容；格式化编辑区是当前工作副本。清空文档会同时清除工作副本和原始源码快照。
 
 ### 格式支持与行为
 

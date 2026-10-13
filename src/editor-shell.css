@@ -1050,6 +1050,216 @@ body.workspace-page,
   border-color: #cbdcbe;
   color: #4f6b42;
 }
+
+/* JSONCrack-inspired editor shell: compact navigation, distinct toolbars,
+   and a canvas that owns the remaining viewport height. */
+body.workspace-page {
+  min-width: 720px;
+  min-height: 480px;
+  background: #f4f5f2;
+}
+.editor-shell {
+  grid-template-columns: 196px minmax(0, 1fr);
+  background: #f4f5f2;
+}
+.app-sidebar {
+  background: #fff;
+}
+.sidebar-brand-row {
+  height: 52px;
+}
+.sidebar-nav {
+  gap: 4px;
+  padding: 12px 9px;
+}
+.sidebar-action {
+  height: 37px;
+  border-radius: 5px;
+}
+.app-main {
+  grid-template-rows: 43px minmax(0, 1fr) 28px;
+  background: #f4f5f2;
+}
+.work-toolbar {
+  height: 43px;
+  grid-template-columns: minmax(300px, 35%) minmax(0, 65%);
+  background: #f5f8fa;
+}
+.source-tools,
+.result-tools {
+  min-height: 0;
+}
+.format-wrap {
+  height: 30px;
+  border-radius: 5px;
+}
+.view-tabs button {
+  padding-inline: 10px;
+}
+.workspace {
+  grid-template-columns: minmax(300px, 35%) minmax(0, 65%);
+}
+.workspace.compare-mode {
+  grid-template-columns: minmax(260px, 1fr) minmax(260px, 1fr) minmax(300px, 1fr);
+}
+.input-panel,
+.compare-input-panel,
+.result-panel {
+  background: #fff;
+}
+.editor-toolbar,
+.compare-pane-toolbar,
+.browser-toolbar {
+  height: 36px;
+  min-height: 36px;
+}
+.editor-toolbar {
+  gap: 8px;
+}
+.file-label,
+.compare-pane-toolbar > div:first-child {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.toolbar-actions {
+  min-width: 0;
+}
+.editor-toolbar .toolbar-actions,
+.compare-file-actions {
+  flex: none;
+  gap: 1px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.editor-toolbar .toolbar-actions::-webkit-scrollbar,
+.compare-file-actions::-webkit-scrollbar {
+  display: none;
+}
+.editor-toolbar .toolbar-actions button,
+.compare-file-actions button {
+  flex: none;
+  white-space: nowrap;
+}
+.source-editor-host,
+.source-editor-host .cm-editor,
+.source-editor-host .cm-scroller {
+  min-height: 0;
+  height: 100%;
+}
+.source-editor-host .cm-editor {
+  display: flex;
+  flex-direction: column;
+}
+.source-editor-host .cm-scroller {
+  flex: 1;
+}
+.editor-status,
+.canvas-status {
+  height: 25px;
+}
+.document-dock {
+  height: 28px;
+  background: #f8faf6;
+}
+.document-tab {
+  height: 24px;
+}
+.table-view-host.tabulator {
+  border: 0;
+  border-radius: 0;
+  font-family: 'DM Sans', 'Noto Sans SC', sans-serif;
+  font-size: 12px;
+}
+.table-view-host .tabulator-header {
+  font-weight: 600;
+}
+.table-view-host .tabulator-cell {
+  padding: 6px 9px;
+}
+.result-code-editor {
+  flex: 1;
+  min-height: 0;
+}
+.result-code-editor .cm-editor,
+.result-code-editor .cm-scroller {
+  height: 100%;
+}
+.result-code-editor .cm-editor {
+  display: flex;
+  flex-direction: column;
+}
+.result-code-editor .cm-scroller {
+  flex: 1;
+}
+body.theme-dark .app-sidebar {
+  background: #1b211d;
+}
+body.theme-dark .work-toolbar {
+  background: #202822;
+}
+body.theme-dark .document-dock {
+  background: #1b211d;
+}
+body.theme-dark .table-view-host.tabulator,
+body.theme-dark .table-view-host.tabulator .tabulator-tableholder,
+body.theme-dark .table-view-host.tabulator .tabulator-table,
+body.theme-dark .table-view-host.tabulator .tabulator-footer {
+  background: #171c19 !important;
+  color: #dce5dc !important;
+}
+body.theme-dark .table-view-host.tabulator .tabulator-header,
+body.theme-dark .table-view-host.tabulator .tabulator-header .tabulator-col,
+body.theme-dark .table-view-host.tabulator .tabulator-header .tabulator-col-content {
+  background: #252e27 !important;
+  color: #e5eee2 !important;
+  border-color: #354137 !important;
+}
+body.theme-dark .table-view-host.tabulator .tabulator-row,
+body.theme-dark .table-view-host.tabulator .tabulator-row.tabulator-row-even,
+body.theme-dark .table-view-host.tabulator .tabulator-row.tabulator-row-odd {
+  background: #1d241f !important;
+  color: #d8e2d5 !important;
+  border-color: #303a32 !important;
+}
+body.theme-dark .table-view-host.tabulator .tabulator-row.tabulator-row-even {
+  background: #202822 !important;
+}
+body.theme-dark .table-view-host.tabulator .tabulator-cell,
+body.theme-dark .table-view-host.tabulator .tabulator-cell * {
+  color: #d5e1d2 !important;
+}
+body.theme-dark .table-view-host.tabulator .tabulator-row:hover,
+body.theme-dark .table-view-host.tabulator .tabulator-row:hover .tabulator-cell {
+  background: #29362b !important;
+  color: #f0f6eb !important;
+}
+body.theme-dark .table-view-host.tabulator .tabulator-data-tree-control {
+  color: #d7edc2 !important;
+  border-color: #617753 !important;
+}
+body.theme-dark .table-view-host.tabulator .tabulator-data-tree-branch {
+  border-color: #65715f !important;
+}
+@media (max-width: 1000px) {
+  .editor-shell {
+    grid-template-columns: 58px minmax(0, 1fr);
+  }
+  .workspace,
+  .work-toolbar {
+    grid-template-columns: minmax(280px, 38%) minmax(0, 62%);
+  }
+}
+@media (max-width: 720px) {
+  body.workspace-page {
+    min-width: 360px;
+  }
+  .workspace.compare-mode {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(220px, 40%) minmax(220px, 40%) minmax(260px, 45%);
+  }
+}
 @media (max-width: 1000px) {
   #convert-panel {
     left: calc(50% + 29px);

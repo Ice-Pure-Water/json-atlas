@@ -127,7 +127,7 @@ function createGraph(rootNode, selectedPath, query, direction = 'LR') {
             cells.some((cell) =>
               `${cell.key} ${cell.value}`.toLowerCase().includes(query.toLowerCase()),
             ) ||
-            childNodes.some((entry) => entry.handle === `row-${index}`);
+            childNodes.some((entry) => entry.handle.startsWith(`cell-${index}-`));
           return {
             key: String(index),
             cells,
