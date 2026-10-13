@@ -27,11 +27,11 @@ Number nodes keep JSON number text in `raw`. This avoids converting a large JSON
 
 The result renderer replaces the view component when the selected mode changes:
 
-- `graph`: `src/graph.js` builds graph nodes from the tagged tree and renders them through React Flow. Card child values navigate down; a nested card header navigates to its parent. Layout order follows source order.
+- `graph`: `src/graph.js` builds graph nodes from the tagged tree and renders them through React Flow. Primitive values and object keys can be edited in place; container summaries navigate down, and a nested card header navigates to its parent. Layout order follows source order.
 - `tree`: `vanilla-jsoneditor` displays and edits the tree. Changes flow back to the working source.
 - `table`: Tabulator displays a recursive data tree.
-- `graph`: React Flow and editable path columns render together. Selection stays synchronized; the path pane can replace a selected node value while preserving the document format.
-- `editor`: CodeMirror displays the editable formatted copy above the collapsible, read-only original-source snapshot.
+- `graph`: React Flow and editable path columns render together. Selection stays synchronized; graph and path edits update the tagged tree, formatted source, and original input editor.
+- `editor`: CodeMirror displays the editable formatted copy above the collapsible, editable original-input editor. Valid original input changes are parsed and formatted automatically. Graph and path edits update both source editors.
 - `compare`: two CodeMirror editors feed a structural diff. The right pane renders the merged data and scrolls in sync with both editors.
 
 Input parsing and conversion are kept separate from view code in `src/core.js`. `src/landing.js` is likewise a small entry point: it mounts the product page from `src/landing/shell.js` and attaches the same theme controller used by the workbench. Browser-only libraries are loaded by the workbench controller.

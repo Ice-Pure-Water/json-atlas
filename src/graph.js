@@ -34,6 +34,14 @@ const valueText = (node) =>
       : node.type === 'null'
         ? 'null'
         : String(node.value);
+const scalarEditText = (node) =>
+  node.type === 'string'
+    ? node.value
+    : node.type === 'number'
+      ? node.raw
+      : node.type === 'null'
+        ? 'null'
+        : String(node.value);
 const childEntries = (node) =>
   node.type === 'object'
     ? node.entries.map(({ key, value }) => [key, value])
@@ -70,13 +78,24 @@ function createGraph(rootNode, selectedPath, query, direction = 'LR') {
             if (childIncluded) childNodes.push({ path: childPath, handle: childPath });
             return {
               key,
+              path: childPath,
+              keyEditable: true,
               value: preview(value),
               handle: childIncluded ? childPath : null,
               targetPath: childIncluded ? childPath : null,
               include: ownMatch || childIncluded,
             };
           }
-          return { key, value: valueText(value), handle: null, include: match };
+          return {
+            key,
+            path: childPath,
+            keyEditable: true,
+            valueType: value.type,
+            editValue: scalarEditText(value),
+            value: valueText(value),
+            handle: null,
+            include: match,
+          };
         })
         .filter((row) => !query || row.include);
     } else {
@@ -98,16 +117,30 @@ function createGraph(rootNode, selectedPath, query, direction = 'LR') {
                 if (childIncluded) childNodes.push({ path: childPath, handle });
                 cells.push({
                   key,
+                  path: childPath,
+                  keyEditable: true,
                   value: preview(value),
                   container: true,
                   targetPath: childIncluded ? childPath : null,
                   handle: childIncluded ? handle : null,
                 });
-              } else cells.push({ key, value: valueText(value), container: false });
+              } else
+                cells.push({
+                  key,
+                  path: childPath,
+                  keyEditable: true,
+                  valueType: value.type,
+                  editValue: scalarEditText(value),
+                  value: valueText(value),
+                  container: false,
+                });
             });
           } else {
             cells.push({
               key: '值',
+              path: itemPath,
+              valueType: ['object', 'array'].includes(item.type) ? null : item.type,
+              editValue: ['object', 'array'].includes(item.type) ? null : scalarEditText(item),
               value: item.type === 'array' ? preview(item) : valueText(item),
               container: item.type === 'array',
             });
@@ -235,6 +268,19 @@ function createGraph(rootNode, selectedPath, query, direction = 'LR') {
 
 function JsonCard({ data }) {
   const rows = data.rows;
+  const editInput = (className, value, label, onCommit) =>
+    h('input', {
+      className,
+      defaultValue: value,
+      'aria-label': label,
+      spellCheck: false,
+      onClick: (event) => event.stopPropagation(),
+      onKeyDown: (event) => {
+        event.stopPropagation();
+        if (event.key === 'Enter') event.currentTarget.blur();
+      },
+      onBlur: (event) => onCommit(event.currentTarget.value),
+    });
   const parentHeaderProps = data.parentPath
     ? {
         className: 'json-card-head json-card-head-parent',
@@ -324,7 +370,14 @@ function JsonCard({ data }) {
                               }
                             : undefined,
                         },
-                        cell?.value ?? '',
+                        cell?.valueType && cell.path
+                          ? editInput(
+                              'json-cell-editor',
+                              cell.editValue,
+                              `${cell.key} 的值`,
+                              (value) => data.onEdit?.(cell.path, 'value', value, cell.valueType),
+                            )
+                          : (cell?.value ?? ''),
                         cell?.handle
                           ? h(Handle, {
                               id: cell.handle,
@@ -379,12 +432,25 @@ function JsonCard({ data }) {
                           }
                         : undefined,
                     },
-                    h('span', { className: 'json-row-key' }, row.key),
-                    h(
-                      'span',
-                      { className: `json-row-value ${row.handle ? 'json-value-container' : ''}` },
-                      row.value,
-                    ),
+                    row.keyEditable
+                      ? editInput('json-row-key-editor', row.key, `${row.key} 的字段名`, (value) =>
+                          data.onEdit?.(row.path, 'key', value),
+                        )
+                      : h('span', { className: 'json-row-key' }, row.key),
+                    row.valueType && row.path
+                      ? editInput(
+                          `json-row-value-editor ${row.handle ? 'json-value-container' : ''}`,
+                          row.editValue,
+                          `${row.key} 的值`,
+                          (value) => data.onEdit?.(row.path, 'value', value, row.valueType),
+                        )
+                      : h(
+                          'span',
+                          {
+                            className: `json-row-value ${row.handle ? 'json-value-container' : ''}`,
+                          },
+                          row.value,
+                        ),
                     row.targetPath
                       ? h('span', { className: 'json-row-jump', 'aria-hidden': true }, '↗')
                       : null,
@@ -405,7 +471,7 @@ function JsonCard({ data }) {
 }
 
 const nodeTypes = { jsonCard: JsonCard };
-function FlowCanvas({ graph, onSelect, registerSelect }) {
+function FlowCanvas({ graph, onSelect, onEdit, registerSelect }) {
   const flow = useReactFlow();
   const [nodes, setNodes] = useState(graph.nodes);
   const [edges, setEdges] = useState(graph.edges);
@@ -448,8 +514,8 @@ function FlowCanvas({ graph, onSelect, registerSelect }) {
     [flow, graph.nodes, onSelect],
   );
   const renderedNodes = useMemo(
-    () => nodes.map((node) => ({ ...node, data: { ...node.data, onNavigate } })),
-    [nodes, onNavigate],
+    () => nodes.map((node) => ({ ...node, data: { ...node.data, onNavigate, onEdit } })),
+    [nodes, onNavigate, onEdit],
   );
   const onInit = (instance) =>
     requestAnimationFrame(() =>
@@ -495,15 +561,15 @@ function FlowCanvas({ graph, onSelect, registerSelect }) {
   );
 }
 
-function GraphApp({ node, selectedPath, query, onSelect, direction, registerSelect }) {
+function GraphApp({ node, selectedPath, query, onSelect, onEdit, direction, registerSelect }) {
   const graph = useMemo(
     () => createGraph(node, selectedPath, query, direction),
     [node, selectedPath, query, direction],
   );
-  return h(ReactFlowProvider, null, h(FlowCanvas, { graph, onSelect, registerSelect }));
+  return h(ReactFlowProvider, null, h(FlowCanvas, { graph, onSelect, onEdit, registerSelect }));
 }
 
-export function mountGraph(element, node, selectedPath, query, onSelect, direction = 'LR') {
+export function mountGraph(element, node, selectedPath, query, onSelect, onEdit, direction = 'LR') {
   const root = createRoot(element);
   let select = () => {};
   root.render(
@@ -512,6 +578,7 @@ export function mountGraph(element, node, selectedPath, query, onSelect, directi
       selectedPath,
       query,
       onSelect,
+      onEdit,
       direction,
       registerSelect: (handler) => {
         select = handler;

@@ -97,6 +97,26 @@ export function replacePath(node, targetPath, replacement, currentPath = '$') {
   return node;
 }
 
+export function renamePathKey(root, targetPath, nextKey) {
+  const separator = targetPath.lastIndexOf('.');
+  if (separator < 0) return root;
+  const parentPath = separator === 0 ? '$' : targetPath.slice(0, separator);
+  const oldKey = targetPath.slice(separator + 1);
+  const parent = findPath(root, parentPath);
+  if (!parent || parent.type !== 'object' || !parent.entries.some(({ key }) => key === oldKey))
+    return root;
+  if (parent.entries.some(({ key }) => key === nextKey && key !== oldKey)) {
+    throw new Error(`字段“${nextKey}”已存在。`);
+  }
+  const updatedParent = {
+    ...parent,
+    entries: parent.entries.map((entry) =>
+      entry.key === oldKey ? { ...entry, key: nextKey } : entry,
+    ),
+  };
+  return replacePath(root, parentPath, updatedParent);
+}
+
 export function matchesQuery(node, path, label, query) {
   return (
     `${label} ${valueText(node)} ${path}`.toLowerCase().includes(query.toLowerCase()) ||
@@ -133,7 +153,22 @@ export function renderColumns(root, path = '$', query = '') {
           : child.type === 'array'
             ? `[${childCount}]`
             : valueText(child);
-      return `<button class="path-item ${active ? 'selected' : ''}" data-path="${escapeHtml(childPath)}"><span>${escapeHtml(key)}</span><small>${escapeHtml(summary)}</small>${childCount ? '<b>›</b>' : ''}</button>`;
+      const keyControl =
+        cursor.type === 'object'
+          ? `<input class="path-key-input" data-path="${escapeHtml(childPath)}" data-original-key="${escapeHtml(key)}" value="${escapeHtml(key)}" aria-label="字段名" spellcheck="false"/>`
+          : `<span class="path-array-index">${escapeHtml(key)}</span>`;
+      let valueControl;
+      if (child.type === 'object' || child.type === 'array') {
+        valueControl = `<button class="path-drill" data-path="${escapeHtml(childPath)}" type="button" aria-label="浏览 ${escapeHtml(key)}">${escapeHtml(summary)} <b>›</b></button>`;
+      } else if (child.type === 'boolean') {
+        valueControl = `<select class="path-value-input" data-path="${escapeHtml(childPath)}" data-value-type="boolean" aria-label="${escapeHtml(key)} 的值"><option value="true" ${child.value ? 'selected' : ''}>true</option><option value="false" ${child.value ? '' : 'selected'}>false</option></select>`;
+      } else if (child.type === 'null') {
+        valueControl = `<input class="path-value-input" data-path="${escapeHtml(childPath)}" data-value-type="null" value="null" aria-label="${escapeHtml(key)} 的值" spellcheck="false"/>`;
+      } else {
+        const value = child.type === 'number' ? child.raw : child.value;
+        valueControl = `<input class="path-value-input" data-path="${escapeHtml(childPath)}" data-value-type="${child.type}" value="${escapeHtml(value)}" aria-label="${escapeHtml(key)} 的值" spellcheck="false"/>`;
+      }
+      return `<div class="path-item ${active ? 'selected' : ''}" data-selected-path="${escapeHtml(childPath)}"><div class="path-key-cell">${keyControl}</div><div class="path-value-cell">${valueControl}</div></div>`;
     });
     columns.push(
       `<div class="path-column">${items.join('') || '<span class="column-empty">没有子字段</span>'}</div>`,

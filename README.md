@@ -41,11 +41,11 @@ The public demo is hosted on GitHub Pages: <https://ice-pure-water.github.io/jso
 
 1. Paste data into the editor, load the example, or import a local file. Imported file extensions select the input format.
 2. The editor formats valid input automatically. Choose another format in the format selector to convert the current document where conversion is supported.
-3. Switch among the graph, tree, table, path, formatted source, and original source views. The graph supports horizontal and vertical layouts; click a nested value to open its card and click that card's header to return to its parent.
+3. Switch among the graph, tree, table, and editor views. The graph supports horizontal and vertical layouts; edit primitive values and object keys in place, click a nested value to open its card, and click that card's header to return to its parent. Graph edits update the source editors and path view.
 4. Open **比较文档** to compare another document. On first open, the current document is copied into the comparison editor as a starting point; replace or edit it to see differences. It follows the current document's format. The right pane displays the merged result and highlights changes; scrolling across all three panes stays synchronized.
 5. Open **转换格式** for compact JSON, sorted JSON, CSV, YAML, TOML, or TypeScript output.
 
-The original source view is read-only and preserves the text as it was first entered or imported. The formatted editor is the working copy. Clearing a document clears both its working copy and original-source snapshot.
+The original input editor preserves the entered or imported text and remains editable. Valid changes are automatically parsed into the formatted editor after a short pause; the formatted editor can also be edited independently. Clearing a document clears both editors.
 
 ## Supported format behavior
 
@@ -143,11 +143,11 @@ npm run preview # 本地预览生产构建
 
 1. 在编辑器粘贴数据、载入示例或导入本地文件。导入时根据文件扩展名选择输入格式。
 2. 有效输入会自动格式化。也可以在格式选择器中选择其他格式，对当前文档进行支持范围内的转换。
-3. 在关系图与路径编辑、树形、表格和编辑器视图间切换。关系图与路径导航同步展示，支持横向和纵向布局；点击嵌套值进入下级卡片，点击卡片表头返回父级。路径面板可以编辑任意节点的 JSON 值。
+3. 在关系图、树形、表格和编辑器视图间切换。关系图与路径导航同步展示，支持横向和纵向布局；可直接修改关系图卡片里的对象键名和基本值，也可在路径面板编辑字段名和值。点击嵌套值进入下级卡片，点击卡片表头返回父级；修改会同步到两个源码编辑区和其他视图。
 4. 点击**比较文档**对照另一份文档。首次打开时，会将当前文档复制到对比编辑区作为起点；随后可直接替换或修改内容查看差异。对比格式跟随当前文档。右侧显示合并后的结构并标出差异；三个区域支持滚动同步。
 5. 点击**转换格式**，可生成压缩 JSON、键排序后的 JSON、CSV、YAML、TOML 或 TypeScript 类型。
 
-编辑器视图上方是可编辑的格式化源码，下方是可折叠的只读原始源码，并保留首次输入或导入的内容。清空文档会同时清除工作副本和原始源码快照。
+编辑器视图上方是可编辑的格式化内容，下方是可折叠的原始输入编辑器。原始输入会保留录入或导入的文本；有效内容修改后会自动解析并更新格式化内容，格式化内容也可以独立编辑。清空文档会同时清除两个编辑区。
 
 ### 格式支持与行为
 

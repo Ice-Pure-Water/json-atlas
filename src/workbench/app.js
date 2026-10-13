@@ -24,6 +24,7 @@ import {
   findPath,
   nearestContainerPath,
   renderColumns,
+  renamePathKey,
   replacePath,
   toTableRows,
 } from './data-views.js';
@@ -85,7 +86,65 @@ const state = {
 };
 
 mountWorkspaceShell($('#app'));
-mountThemeControls({ select: $('#theme-select') });
+mountThemeControls({
+  buttons: [...document.querySelectorAll('.theme-switcher [data-theme-choice]')],
+});
+const sourceStack = $('.source-stack');
+const sourceSplitter = $('#source-stack-splitter');
+function setSourcePaneRatio(ratio) {
+  const boundedRatio = Math.max(0.2, Math.min(0.8, ratio));
+  sourceStack.style.setProperty('--source-top-height', `${boundedRatio * 100}%`);
+  sourceSplitter.setAttribute('aria-valuenow', String(Math.round(boundedRatio * 100)));
+}
+function updateSourceSplitterState() {
+  sourceSplitter.setAttribute(
+    'aria-disabled',
+    String($('#original-source-section').classList.contains('collapsed')),
+  );
+}
+let sourceSplitterDragging = false;
+sourceSplitter.addEventListener('pointerdown', (event) => {
+  if ($('#original-source-section').classList.contains('collapsed')) return;
+  sourceSplitterDragging = true;
+  sourceSplitter.setPointerCapture(event.pointerId);
+  event.preventDefault();
+});
+sourceSplitter.addEventListener('pointermove', (event) => {
+  if (!sourceSplitterDragging) return;
+  const bounds = sourceStack.getBoundingClientRect();
+  setSourcePaneRatio((event.clientY - bounds.top) / bounds.height);
+});
+sourceSplitter.addEventListener('pointerup', () => {
+  sourceSplitterDragging = false;
+});
+sourceSplitter.addEventListener('pointercancel', () => {
+  sourceSplitterDragging = false;
+});
+sourceSplitter.addEventListener('keydown', (event) => {
+  if ($('#original-source-section').classList.contains('collapsed')) return;
+  const current = Number(sourceSplitter.getAttribute('aria-valuenow')) / 100;
+  if (event.key === 'ArrowUp' || event.key === 'ArrowLeft') {
+    setSourcePaneRatio(current - 0.02);
+  } else if (event.key === 'ArrowDown' || event.key === 'ArrowRight') {
+    setSourcePaneRatio(current + 0.02);
+  } else if (event.key === 'Home') {
+    setSourcePaneRatio(0.2);
+  } else if (event.key === 'End') {
+    setSourcePaneRatio(0.8);
+  } else return;
+  event.preventDefault();
+});
+$('#original-source-toggle').addEventListener('click', () => {
+  const pane = $('#original-source-section');
+  pane.classList.toggle('collapsed');
+  $('#original-source-toggle').setAttribute(
+    'aria-expanded',
+    String(!pane.classList.contains('collapsed')),
+  );
+  state.originalSourceOpen = !pane.classList.contains('collapsed');
+  updateSourceSplitterState();
+});
+updateSourceSplitterState();
 
 const sourceHost = $('#source');
 const sourceLanguage = new Compartment();
@@ -98,7 +157,7 @@ const sourceView = new EditorView({
       keymap.of([indentWithTab]),
       sourceLanguage.of(json()),
       EditorView.lineWrapping,
-      placeholder('粘贴 JSON、YAML、TOML、CSV 或日志…'),
+      placeholder('在此输入或编辑格式化内容…'),
       EditorView.theme({
         '&': { height: '100%', fontSize: '12px', backgroundColor: '#fff', color: '#344238' },
         '.cm-scroller': { fontFamily: "'DM Mono','Noto Sans SC',monospace", lineHeight: '1.8' },
@@ -178,7 +237,14 @@ function setCompareLanguage(format = 'json') {
     ),
   });
 }
-function createCodeEditor(parent, text, format = 'json', readOnly = false) {
+function createCodeEditor(
+  parent,
+  text,
+  format = 'json',
+  readOnly = false,
+  placeholderText = '',
+  onDocumentChange = null,
+) {
   const language =
     format === 'yaml' ? yaml() : format === 'json' || format === 'jsonl' ? json() : [];
   return new EditorView({
@@ -190,7 +256,15 @@ function createCodeEditor(parent, text, format = 'json', readOnly = false) {
         keymap.of([indentWithTab]),
         language,
         EditorView.lineWrapping,
+        ...(placeholderText ? [placeholder(placeholderText)] : []),
         ...(readOnly ? [EditorState.readOnly.of(true), EditorView.editable.of(false)] : []),
+        ...(onDocumentChange
+          ? [
+              EditorView.updateListener.of((update) => {
+                if (update.docChanged) onDocumentChange(update.state.doc.toString());
+              }),
+            ]
+          : []),
         EditorView.theme({
           '&': { height: '100%', fontSize: '12px', backgroundColor: '#fff', color: '#344238' },
           '.cm-scroller': { fontFamily: "'DM Mono','Noto Sans SC',monospace", lineHeight: '1.8' },
@@ -222,6 +296,51 @@ const formatLabel = (format) =>
   ({ jsonl: 'JSONL', ndjson: 'NDJSON', yaml: 'YAML', toml: 'TOML', csv: 'CSV', log: 'LOG' })[
     format
   ] ?? 'JSON';
+function syncOriginalSourceView(text, format) {
+  const host = $('#original-source');
+  if (!host) return;
+  originalCodeView?.destroy();
+  host.replaceChildren();
+  originalCodeView = createCodeEditor(
+    host,
+    text ?? '',
+    format ?? 'json',
+    false,
+    '原始输入会保留导入时的内容…',
+    (currentText) => {
+      const active = state.documents.find((item) => item.id === state.activeDocumentId);
+      if (active) {
+        active.originalText = currentText;
+        active.originalFormat = active.originalFormat || state.format;
+      }
+      $('#original-format-label').textContent =
+        `${formatLabel(active?.originalFormat ?? state.format)} · 输入格式`;
+      $('#original-bytes').textContent = `${new Blob([currentText]).size.toLocaleString()} B`;
+      clearTimeout(originalAutoFormatTimer);
+      const documentId = state.activeDocumentId;
+      originalAutoFormatTimer = setTimeout(() => {
+        if (documentId !== state.activeDocumentId) return;
+        if (!currentText.trim()) {
+          source.value = '';
+          syncActiveDocument();
+          parseAndRender();
+          return;
+        }
+        try {
+          formatCurrentDocument();
+          parseAndRender();
+        } catch (error) {
+          $('#status').textContent = `等待有效输入：${error.message}`;
+        }
+      }, 500);
+    },
+  );
+  $('#original-format-label').textContent = text ? `${formatLabel(format)} · 输入格式` : '—';
+  $('#original-bytes').textContent = text
+    ? `${new Blob([text]).size.toLocaleString()} B`
+    : '尚未载入原始内容';
+}
+syncOriginalSourceView('', state.format);
 function renderDocumentTabs() {
   $('#document-tabs').innerHTML = state.documents
     .map(
@@ -247,8 +366,6 @@ function resetResultView() {
   jsonEditor = null;
   resultCodeView?.destroy();
   resultCodeView = null;
-  originalCodeView?.destroy();
-  originalCodeView = null;
   dataTable?.destroy();
   dataTable = null;
   graphCleanup?.();
@@ -284,6 +401,7 @@ function switchDocument(id) {
   $('#compare-format-label').textContent = formatLabel(next.format);
   $('#input-format-label').textContent = formatLabel(next.format);
   setSourceLanguage(next.format);
+  syncOriginalSourceView(next.originalText, next.originalFormat);
   renderDocumentTabs();
   if (next.text.trim()) parseAndRender();
   else if (state.mode === 'compare') render();
@@ -347,8 +465,12 @@ function escapeHtml(value) {
 function renderPathPanel() {
   const explorer = $('#path-explorer');
   if (!explorer || !state.shown) return;
-  const selectedNode = findPath(state.shown, state.selected) ?? state.shown;
-  explorer.innerHTML = `<div class="path-explorer-layout">${renderColumns(state.shown, state.selected, state.query)}<section class="path-editor-panel"><div class="path-editor-heading"><span>编辑当前值</span><code>${escapeHtml(state.selected)}</code></div><textarea id="path-value-editor" spellcheck="false" aria-label="JSON 路径值">${escapeHtml(stringify(selectedNode, 2))}</textarea><button id="apply-path-value" class="button button-dark" type="button">应用修改</button><div id="path-edit-error" class="path-edit-error" role="status">输入合法 JSON 后应用；字符串值请保留引号。</div></section></div>`;
+  const selectedNode = findPath(state.shown, state.selected);
+  const navigationPath =
+    selectedNode?.type === 'object' || selectedNode?.type === 'array'
+      ? state.selected
+      : nearestContainerPath(state.shown, state.selected);
+  explorer.innerHTML = `<div class="path-explorer-heading"><strong>路径</strong><code>${escapeHtml(state.selected)}</code><span>直接编辑字段名和值</span></div>${renderColumns(state.shown, navigationPath, state.query)}`;
 }
 
 function render() {
@@ -360,8 +482,6 @@ function render() {
     jsonEditor = null;
     resultCodeView?.destroy();
     resultCodeView = null;
-    originalCodeView?.destroy();
-    originalCodeView = null;
     dataTable?.destroy();
     dataTable = null;
     graphCleanup?.();
@@ -393,8 +513,6 @@ function render() {
   jsonEditor = null;
   resultCodeView?.destroy();
   resultCodeView = null;
-  originalCodeView?.destroy();
-  originalCodeView = null;
   dataTable?.destroy();
   dataTable = null;
   graphCleanup?.();
@@ -415,49 +533,6 @@ function render() {
       : '等待输入';
     if (comparisonSource.value.trim()) runDiff();
     else syncCompareScroll();
-    return;
-  } else if (mode === 'editor') {
-    const active = state.documents.find((item) => item.id === state.activeDocumentId);
-    const originalText = active?.originalText ?? active?.text ?? '';
-    viewer.innerHTML = `<div class="editor-stack"><section class="formatted-source-pane"><div class="stacked-editor-heading"><strong>格式化源码</strong><span>可编辑</span></div><div class="source-editor-host result-code-editor" id="formatted-source-editor"></div></section><details class="original-source-pane" id="original-source-section" ${state.originalSourceOpen ? 'open' : ''}><summary><strong>原始源码</strong><span>只读 · 点击折叠</span></summary><div class="source-editor-host result-code-editor" id="original-source-editor"></div></details></div>`;
-    $('#original-source-section').addEventListener('toggle', (event) => {
-      state.originalSourceOpen = event.currentTarget.open;
-    });
-    resultCodeView = createCodeEditor($('#formatted-source-editor'), source.value, state.format);
-    originalCodeView = createCodeEditor(
-      $('#original-source-editor'),
-      originalText,
-      active?.originalFormat ?? state.format,
-      true,
-    );
-    resultCodeView.dom.addEventListener('input', () => {
-      const text = resultCodeView.state.doc.toString();
-      source.value = text;
-      setSourceLanguage(state.format);
-      $('#input-format-label').textContent = formatLabel(state.format);
-      const active = state.documents.find((item) => item.id === state.activeDocumentId);
-      if (active) {
-        active.text = text;
-        active.format = state.format;
-      }
-      syncActiveDocument();
-      try {
-        state.root = parseInput(text, state.format);
-        state.shown = state.expand
-          ? expandNested(state.root, Number($('#depth').value) || 25)
-          : state.root;
-        $('#status').textContent = '格式化源码已同步';
-        $('#stats').textContent =
-          `${countNodes(state.shown).toLocaleString()} 个节点 · ${new Blob([text]).size.toLocaleString()} 字节`;
-      } catch (error) {
-        state.root = state.shown = null;
-        $('#status').textContent = error.message;
-        $('#stats').textContent = '—';
-      }
-      $('#input-bytes').textContent = `${new Blob([text]).size.toLocaleString()} B`;
-    });
-    $('#status').textContent = '格式化后的源码';
-    $('#stats').textContent = `${new Blob([source.value]).size.toLocaleString()} 字节`;
     return;
   } else if (mode === 'table') {
     viewer.innerHTML = '<div class="table-view-host"></div>';
@@ -510,6 +585,35 @@ function render() {
             updateCrumbs();
             renderPathPanel();
           },
+          (path, editType, value, valueType) => {
+            try {
+              let updated;
+              let nextPath = path;
+              if (editType === 'key') {
+                const nextKey = value.trim();
+                if (!nextKey) throw new Error('字段名不能为空。');
+                updated = renamePathKey(state.shown, path, nextKey);
+                if (updated === state.shown) throw new Error('找不到要修改的字段。');
+                nextPath = `${path.slice(0, path.lastIndexOf('.') + 1)}${nextKey}`;
+              } else {
+                let replacement;
+                if (valueType === 'string') replacement = { type: 'string', value };
+                else if (valueType === 'boolean')
+                  replacement = { type: 'boolean', value: value === 'true' };
+                else if (valueType === 'null') replacement = parseInput(value, 'json');
+                else {
+                  replacement = parseInput(value, 'json');
+                  if (replacement.type !== 'number') throw new Error('请输入有效数字。');
+                }
+                updated = replacePath(state.shown, path, replacement);
+                if (updated === state.shown) throw new Error('找不到要修改的值。');
+              }
+              commitPathUpdate(updated, nextPath);
+            } catch (error) {
+              $('#status').textContent = `修改失败：${error.message}`;
+              render();
+            }
+          },
           state.graphDirection,
         );
       })
@@ -543,6 +647,12 @@ function render() {
               const editedNode = parseInput(jsonText, 'json');
               const text = serializeNode(editedNode, state.format);
               source.value = text;
+              const active = state.documents.find((item) => item.id === state.activeDocumentId);
+              if (active) {
+                active.originalText = text;
+                active.originalFormat = state.format;
+              }
+              syncOriginalSourceView(text, state.format);
               updateInputExtension(state.format);
               $('#input-format-label').textContent = formatLabel(state.format);
               state.root = parseInput(text, state.format);
@@ -631,8 +741,6 @@ function parseAndRender() {
     jsonEditor = null;
     resultCodeView?.destroy();
     resultCodeView = null;
-    originalCodeView?.destroy();
-    originalCodeView = null;
     dataTable?.destroy();
     dataTable = null;
     graphCleanup?.();
@@ -658,12 +766,14 @@ function updateInputExtension(format) {
 }
 function formatCurrentDocument() {
   const active = state.documents.find((item) => item.id === state.activeDocumentId);
-  if (!source.value.trim()) return;
-  if (active && !active.originalText) {
-    active.originalText = source.value;
-    active.originalFormat = state.format;
+  const originalText = originalCodeView.state.doc.toString();
+  if (!originalText.trim()) return;
+  const originalFormat = active?.originalFormat ?? state.format;
+  if (active) {
+    active.originalText = originalText;
+    active.originalFormat = originalFormat;
   }
-  const formatted = formatEditorToJson(source, state.format, getDepthLimit());
+  const formatted = formatEditorToJson({ value: originalText }, originalFormat, getDepthLimit());
   let formattedCompare = comparisonSource.value;
   let compareError = '';
   if (formattedCompare.trim()) {
@@ -748,6 +858,7 @@ function setInput(text, name = 'untitled.json', format = 'json') {
       $('#compare-name').textContent = active.compareName;
     }
   }
+  syncOriginalSourceView(text, format);
   source.value = text;
   $('#input-name').textContent = name;
   $('#format').value = format;
@@ -856,12 +967,13 @@ function clearDocument() {
     active.originalText = '';
     active.originalFormat = state.format;
   }
+  syncOriginalSourceView('', state.format);
   parseAndRender();
   renderDocumentTabs();
 }
 $('#clear-input').addEventListener('click', clearDocument);
 $('#format-input').addEventListener('click', () => {
-  if (!source.value.trim()) {
+  if (!originalCodeView.state.doc.toString().trim()) {
     $('#status').textContent = '请先输入或载入 JSON';
     return;
   }
@@ -1169,39 +1281,25 @@ viewer.addEventListener('click', (event) => {
     render();
     return;
   }
-  const pathItem = event.target.closest('.path-item[data-path]');
-  if (pathItem) {
-    state.selected = pathItem.dataset.path;
+  const editorInput = event.target.closest('.path-key-input, .path-value-input');
+  if (editorInput) {
+    state.selected = editorInput.dataset.path;
     updateCrumbs();
-    renderPathPanel();
+    const pathLabel = $('#path-explorer .path-explorer-heading code');
+    if (pathLabel) pathLabel.textContent = state.selected;
+    viewer
+      .querySelectorAll('.path-item.selected')
+      .forEach((item) => item.classList.remove('selected'));
+    editorInput.closest('.path-item')?.classList.add('selected');
     graphCleanup?.select?.(nearestContainerPath(state.shown, state.selected));
     return;
   }
-  if (event.target.closest('#apply-path-value')) {
-    try {
-      const replacement = parseInput($('#path-value-editor').value, 'json');
-      const updated = replacePath(state.shown, state.selected, replacement);
-      if (updated === state.shown && state.selected !== '$') {
-        throw new Error('找不到当前路径，请重新选择节点。');
-      }
-      const text = serializeNode(updated, state.format);
-      source.value = text;
-      setSourceLanguage(state.format);
-      updateInputExtension(state.format);
-      state.root = parseInput(text, state.format);
-      state.shown = state.expand ? expandNested(state.root, getDepthLimit()) : state.root;
-      syncActiveDocument();
-      $('#input-format-label').textContent = formatLabel(state.format);
-      $('#input-bytes').textContent = `${new Blob([text]).size.toLocaleString()} B`;
-      render();
-      $('#status').textContent = '路径值已更新';
-    } catch (error) {
-      if (error instanceof SyntaxError) {
-        $('#path-edit-error').textContent = `JSON 格式无效：${error.message}`;
-      } else {
-        $('#path-edit-error').textContent = `无法应用修改：${error.message}`;
-      }
-    }
+  const drill = event.target.closest('.path-drill[data-path]');
+  if (drill) {
+    state.selected = drill.dataset.path;
+    updateCrumbs();
+    renderPathPanel();
+    graphCleanup?.select?.(nearestContainerPath(state.shown, state.selected));
     return;
   }
   const row = event.target.closest('.merged-line[data-path]');
@@ -1214,27 +1312,83 @@ viewer.addEventListener('click', (event) => {
     .forEach((item) => item.classList.remove('selected'));
   row.classList.add('selected');
 });
+function commitPathUpdate(updated, selectedPath = state.selected) {
+  const text = serializeNode(updated, state.format);
+  source.value = text;
+  const active = state.documents.find((item) => item.id === state.activeDocumentId);
+  if (active) {
+    active.originalText = text;
+    active.originalFormat = state.format;
+  }
+  syncOriginalSourceView(text, state.format);
+  setSourceLanguage(state.format);
+  updateInputExtension(state.format);
+  state.root = parseInput(text, state.format);
+  state.shown = state.expand ? expandNested(state.root, getDepthLimit()) : state.root;
+  state.selected = findPath(state.shown, selectedPath) ? selectedPath : '$';
+  syncActiveDocument();
+  $('#input-format-label').textContent = formatLabel(state.format);
+  $('#input-bytes').textContent = `${new Blob([text]).size.toLocaleString()} B`;
+  render();
+  $('#status').textContent = '路径内容已更新';
+}
+viewer.addEventListener('change', (event) => {
+  const keyInput = event.target.closest('.path-key-input');
+  const valueInput = event.target.closest('.path-value-input');
+  if (!keyInput && !valueInput) return;
+  const path = (keyInput ?? valueInput).dataset.path;
+  try {
+    let updated;
+    let selectedPath = state.selected;
+    if (keyInput) {
+      const nextKey = keyInput.value.trim();
+      const previousKey = keyInput.dataset.originalKey;
+      if (!nextKey) throw new Error('字段名不能为空。');
+      if (nextKey === previousKey) return;
+      updated = renamePathKey(state.shown, path, nextKey);
+      if (updated === state.shown) throw new Error('找不到要修改的字段。');
+      const newPath = `${path.slice(0, path.lastIndexOf('.') + 1)}${nextKey}`;
+      if (
+        selectedPath === path ||
+        selectedPath.startsWith(`${path}.`) ||
+        selectedPath.startsWith(`${path}[`)
+      ) {
+        selectedPath = `${newPath}${selectedPath.slice(path.length)}`;
+      }
+    } else {
+      const type = valueInput.dataset.valueType;
+      let replacement;
+      if (type === 'boolean') replacement = { type, value: valueInput.value === 'true' };
+      else if (type === 'string') replacement = { type, value: valueInput.value };
+      else if (type === 'null') replacement = parseInput(valueInput.value, 'json');
+      else {
+        replacement = parseInput(valueInput.value, 'json');
+        if (replacement.type !== 'number') throw new Error('请输入有效数字。');
+      }
+      updated = replacePath(state.shown, path, replacement);
+      if (updated === state.shown) throw new Error('找不到要修改的值。');
+      selectedPath = path;
+    }
+    commitPathUpdate(updated, selectedPath);
+  } catch (error) {
+    $('#status').textContent = `修改失败：${error.message}`;
+    renderPathPanel();
+  }
+});
+viewer.addEventListener('keydown', (event) => {
+  if (event.key === 'Enter' && event.target.matches('.path-key-input, .path-value-input')) {
+    event.preventDefault();
+    event.target.blur();
+  }
+});
 let originalTextTimer;
+let originalAutoFormatTimer;
 let compareOriginalTextTimer;
 let sourceAutoFormatTimer;
 let compareAutoFormatTimer;
 let originalFormatTimer;
 sourceView.dom.addEventListener('input', () => {
   syncActiveDocument();
-  const active = state.documents.find((item) => item.id === state.activeDocumentId);
-  clearTimeout(originalTextTimer);
-  if (active && !active.originalText) {
-    const documentId = active.id;
-    const originalText = source.value;
-    const originalFormat = state.format;
-    originalTextTimer = setTimeout(() => {
-      const document = state.documents.find((item) => item.id === documentId);
-      if (document && !document.originalText) {
-        document.originalText = originalText;
-        document.originalFormat = originalFormat;
-      }
-    }, 650);
-  }
   clearTimeout(sourceAutoFormatTimer);
   sourceAutoFormatTimer = setTimeout(() => {
     try {

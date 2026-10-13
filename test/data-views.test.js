@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { nearestContainerPath, replacePath } from '../src/workbench/data-views.js';
+import { nearestContainerPath, renamePathKey, replacePath } from '../src/workbench/data-views.js';
 
 test('replacePath immutably updates object and array values by JSON path', () => {
   const source = {
@@ -35,6 +35,26 @@ test('replacePath returns the original tree when the path does not exist', () =>
     entries: [{ key: 'value', value: { type: 'number', raw: '1' } }],
   };
   assert.equal(replacePath(source, '$.missing', { type: 'null' }), source);
+});
+
+test('renamePathKey immutably renames an object field and rejects duplicates', () => {
+  const source = {
+    type: 'object',
+    entries: [
+      { key: 'oldName', value: { type: 'string', value: 'value' } },
+      { key: 'existing', value: { type: 'boolean', value: true } },
+    ],
+  };
+  const renamed = renamePathKey(source, '$.oldName', 'newName');
+  assert.deepEqual(
+    renamed.entries.map(({ key }) => key),
+    ['newName', 'existing'],
+  );
+  assert.deepEqual(
+    source.entries.map(({ key }) => key),
+    ['oldName', 'existing'],
+  );
+  assert.throws(() => renamePathKey(source, '$.oldName', 'existing'), /已存在/);
 });
 
 test('nearestContainerPath maps primitive paths to the closest graph card', () => {
