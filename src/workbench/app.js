@@ -517,7 +517,7 @@ function renderPathPanel() {
   const previewNode =
     state.pathPreviewMode === 'full' ? state.shown : (selectedNode ?? state.shown);
   const previewText = stringify(previewNode);
-  explorer.innerHTML = `<div class="path-explorer-heading"><strong>路径</strong><code>${escapeHtml(state.selected)}</code><span>直接编辑字段名和值</span></div><div class="path-explorer-body"><div class="path-columns-host">${renderColumns(state.shown, navigationPath, state.query)}</div><div class="path-preview-splitter" data-path-preview-splitter role="separator" aria-label="调整路径浏览与 JSON 编辑区宽度" aria-orientation="vertical" tabindex="0"></div><aside class="path-preview-panel" aria-label="JSON 内容编辑"><div class="path-preview-toolbar"><div class="path-preview-tabs" role="tablist" aria-label="预览内容范围"><button type="button" data-preview-mode="selected" class="${state.pathPreviewMode === 'selected' ? 'active' : ''}" aria-pressed="${state.pathPreviewMode === 'selected'}">所选内容</button><button type="button" data-preview-mode="full" class="${state.pathPreviewMode === 'full' ? 'active' : ''}" aria-pressed="${state.pathPreviewMode === 'full'}">完整结果</button></div><span id="path-preview-status">编辑即同步</span><button class="path-preview-copy" type="button" data-path-preview-copy>复制</button></div><div id="path-preview-editor" class="path-preview-editor" aria-label="可编辑 JSON 预览"></div></aside></div>`;
+  explorer.innerHTML = `<div class="path-explorer-heading"><strong>路径</strong><code>${escapeHtml(state.selected)}</code><span>直接编辑字段名和值</span></div><div class="path-explorer-body"><div class="path-columns-host">${renderColumns(state.shown, navigationPath, state.query, state.selected)}</div><div class="path-preview-splitter" data-path-preview-splitter role="separator" aria-label="调整路径浏览与 JSON 编辑区宽度" aria-orientation="vertical" tabindex="0"></div><aside class="path-preview-panel" aria-label="JSON 内容编辑"><div class="path-preview-toolbar"><div class="path-preview-tabs" role="tablist" aria-label="预览内容范围"><button type="button" data-preview-mode="selected" class="${state.pathPreviewMode === 'selected' ? 'active' : ''}" aria-pressed="${state.pathPreviewMode === 'selected'}">所选内容</button><button type="button" data-preview-mode="full" class="${state.pathPreviewMode === 'full' ? 'active' : ''}" aria-pressed="${state.pathPreviewMode === 'full'}">完整结果</button></div><span id="path-preview-status">编辑即同步</span><button class="path-preview-copy" type="button" data-path-preview-copy>复制</button></div><div id="path-preview-editor" class="path-preview-editor" aria-label="可编辑 JSON 预览"></div></aside></div>`;
   explorer.style.setProperty('--path-nav-width', `${state.pathNavRatio}%`);
   pathPreviewView = createCodeEditor(
     $('#path-preview-editor'),
@@ -529,6 +529,24 @@ function renderPathPanel() {
       if (!syncingPathPreview) schedulePathPreviewUpdate(text);
     },
   );
+  requestAnimationFrame(() => {
+    if (!explorer.isConnected) return;
+    const columnsView = explorer.querySelector('.columns-view');
+    const selectedRow = [...explorer.querySelectorAll('.path-item[data-selected-path]')].find(
+      (item) => item.dataset.selectedPath === state.selected,
+    );
+    const selectedColumn = selectedRow?.closest('.path-column');
+    if (!columnsView || !selectedColumn) return;
+    const scrollTarget = Math.max(
+      0,
+      selectedColumn.offsetLeft - (columnsView.clientWidth - selectedColumn.offsetWidth) / 2,
+    );
+    columnsView.scrollTo({ left: scrollTarget, behavior: 'auto' });
+    selectedColumn.scrollTop = Math.max(
+      0,
+      selectedRow.offsetTop - (selectedColumn.clientHeight - selectedRow.offsetHeight) / 2,
+    );
+  });
 }
 
 function syncPathPreviewSelection() {
@@ -601,7 +619,8 @@ function applyPathPreviewUpdate(updated, selectedPath) {
       ? state.selected
       : nearestContainerPath(state.shown, state.selected);
   const columnsHost = $('#path-explorer .path-columns-host');
-  if (columnsHost) columnsHost.innerHTML = renderColumns(state.shown, navigationPath, state.query);
+  if (columnsHost)
+    columnsHost.innerHTML = renderColumns(state.shown, navigationPath, state.query, state.selected);
   graphCleanup?.update?.(state.shown, state.selected, state.query, state.graphDirection);
   updateCrumbs();
 }

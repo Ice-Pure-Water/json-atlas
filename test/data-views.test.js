@@ -1,6 +1,26 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { nearestContainerPath, renamePathKey, replacePath } from '../src/workbench/data-views.js';
+import { parseInput } from '../src/core.js';
+import {
+  nearestContainerPath,
+  renamePathKey,
+  renderColumns,
+  replacePath,
+} from '../src/workbench/data-views.js';
+
+test('path columns retain the full ancestry and mark the selected node', () => {
+  const source = parseInput(
+    JSON.stringify({
+      level1: { level2: { level3: { level4: { level5: { value: true } } } } },
+    }),
+    'json',
+  );
+  const selectedPath = '$.level1.level2.level3.level4.level5';
+  const html = renderColumns(source, selectedPath, '', selectedPath);
+
+  assert.equal((html.match(/class="path-column"/g) ?? []).length, 6);
+  assert.ok(html.includes(`class="path-item selected" data-selected-path="${selectedPath}"`));
+});
 
 test('replacePath immutably updates object and array values by JSON path', () => {
   const source = {
