@@ -144,6 +144,39 @@
   white-space: nowrap;
   max-width: 68%;
 }
+.json-row-key-editor,
+.json-row-value-editor,
+.json-cell-editor {
+  min-width: 0;
+  height: 25px;
+  padding: 3px 5px;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  outline: 0;
+  background: transparent;
+  font:
+    11px 'DM Mono',
+    'Noto Sans SC',
+    monospace;
+}
+.json-row-key-editor {
+  flex: 1 1 42%;
+  width: 42%;
+  color: #9a5149;
+}
+.json-row-value-editor {
+  flex: 1 1 58%;
+  width: 58%;
+  color: #53704d;
+  text-align: right;
+}
+.json-row-key-editor:focus,
+.json-row-value-editor:focus,
+.json-cell-editor:focus {
+  border-color: #a9c58e;
+  background: #f7faf4;
+  color: #344536;
+}
 .json-value-container {
   color: #899b7d;
 }
@@ -223,6 +256,10 @@
 }
 .json-array-table td.json-cell-container {
   color: #94a282;
+}
+.json-cell-editor {
+  width: 100%;
+  color: #53704d;
 }
 .graph-view-host .react-flow__edge-path {
   stroke-linecap: round;

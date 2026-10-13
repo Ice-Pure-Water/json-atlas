@@ -41,11 +41,11 @@ The public demo is hosted on GitHub Pages: <https://ice-pure-water.github.io/jso
 
 1. Paste data into the editor, load the example, or import a local file. Imported file extensions select the input format.
 2. The editor formats valid input automatically. Choose another format in the format selector to convert the current document where conversion is supported.
-3. Switch among the graph, tree, table, path, formatted source, and original source views. The graph supports horizontal and vertical layouts; click a nested value to open its card and click that card's header to return to its parent.
-4. Open **比较文档** to enter a second document. It uses the current document's format. The right pane displays the merged result and highlights changes; editing either source updates the comparison.
+3. Switch among the graph, tree, table, and editor views. The graph supports horizontal and vertical layouts; edit primitive values and object keys in place, click a nested value to open its card, and click that card's header to return to its parent. Graph edits update the source editors and path view.
+4. Open **比较文档** to compare another document. On first open, the current document is copied into the comparison editor as a starting point; replace or edit it to see differences. It follows the current document's format. The right pane displays the merged result and highlights changes; scrolling across all three panes stays synchronized.
 5. Open **转换格式** for compact JSON, sorted JSON, CSV, YAML, TOML, or TypeScript output.
 
-The original source view preserves the text as it was first entered or imported. The formatted editor is the working copy. Clearing a document clears both its working copy and original-source snapshot.
+The original input editor preserves the entered or imported text and remains editable. Valid changes are automatically parsed into the formatted editor after a short pause; the formatted editor can also be edited independently. Clearing a document clears both editors.
 
 ## Supported format behavior
 
@@ -112,7 +112,7 @@ JSON Atlas 是免费的开源结构化数据工作台，用于查看、整理、
 - **输入格式：** JSON、JSONL、NDJSON、YAML、TOML、CSV，以及混合日志中的 JSON 数据提取。
 - **嵌套 JSON 展开：** 递归展开完整 JSON 对象或数组字符串，最大深度可调整。普通文本中仅包含花括号时会保留原文。
 - **精确保留 JSON 数字：** 解析和 JSON 导出时保留大整数及高精度数字的原始文本，避免 JavaScript 数值精度损失。
-- **多种联动视图：** 同一份数据可切换关系图、树形、递归表格、路径列、格式化源码和原始源码。
+- **多种联动视图：** 关系图与可编辑路径并排联动，也可切换树形、递归表格或编辑器视图。编辑器上下展示格式化源码和可折叠的只读原始源码。
 - **文档比较：** 并排编辑两份文档，在融合结果中标记新增、删除和修改；三个区域支持滚动同步。
 - **格式转换：** 格式化或压缩 JSON、排序对象键，并按目标格式能力导出 JSON、JSONL、YAML、TOML、CSV 或 TypeScript 类型。
 - **三种主题：** 跟随系统、浅色和深色。主页和工作台共用主题设置。
@@ -143,11 +143,11 @@ npm run preview # 本地预览生产构建
 
 1. 在编辑器粘贴数据、载入示例或导入本地文件。导入时根据文件扩展名选择输入格式。
 2. 有效输入会自动格式化。也可以在格式选择器中选择其他格式，对当前文档进行支持范围内的转换。
-3. 在关系图、树形、表格、路径、格式化源码和原始源码视图间切换。关系图支持横向和纵向布局；点击嵌套值进入下级卡片，点击卡片表头返回父级。
-4. 点击**比较文档**输入第二份文档。对比格式跟随当前文档。右侧显示合并后的结构并标出差异；编辑任一侧后会自动更新比较结果。
+3. 在关系图、树形、表格和编辑器视图间切换。关系图与路径导航同步展示，支持横向和纵向布局；可直接修改关系图卡片里的对象键名和基本值，也可在路径面板编辑字段名和值。点击嵌套值进入下级卡片，点击卡片表头返回父级；修改会同步到两个源码编辑区和其他视图。
+4. 点击**比较文档**对照另一份文档。首次打开时，会将当前文档复制到对比编辑区作为起点；随后可直接替换或修改内容查看差异。对比格式跟随当前文档。右侧显示合并后的结构并标出差异；三个区域支持滚动同步。
 5. 点击**转换格式**，可生成压缩 JSON、键排序后的 JSON、CSV、YAML、TOML 或 TypeScript 类型。
 
-原始源码视图保留首次输入或导入的内容；格式化编辑区是当前工作副本。清空文档会同时清除工作副本和原始源码快照。
+编辑器视图上方是可编辑的格式化内容，下方是可折叠的原始输入编辑器。原始输入会保留录入或导入的文本；有效内容修改后会自动解析并更新格式化内容，格式化内容也可以独立编辑。清空文档会同时清除两个编辑区。
 
 ### 格式支持与行为
 
@@ -167,9 +167,18 @@ npm run preview # 本地预览生产构建
 ```text
 src/
   core.js             解析、无损 JSON 数据模型、嵌套展开、序列化、扁平化和差异计算
-  main.js             工作台状态、编辑器、视图、导入导出和比较界面
+  main.js             工作台浏览器入口
+  shared/theme.js     主页与工作台共用的主题偏好控制器
+  workbench/
+    app.js            工作台状态编排、编辑器接线、导入导出和交互
+    shell.js          工作台结构与控件标记
+    data-views.js     树、表格、路径视图的数据映射与路径值更新
+    diff-renderer.js  按文档格式生成差异视图
+    formatting.js     文档格式化、解析与格式转换
+  landing/
+    shell.js          主页结构与产品介绍内容
   graph.js            React Flow 关系图和节点导航
-  landing.js          产品介绍页和共享主题设置
+  landing.js          主页浏览器入口
   style.css           共享基础与组件样式
   editor-shell.css    工作台布局和主题样式
   graph.css           关系图样式
