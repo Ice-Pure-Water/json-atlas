@@ -61,6 +61,8 @@ const state = {
   graphDirection: 'LR',
   lastDataMode: 'graph',
   selected: '$',
+  pathPreviewMode: 'selected',
+  pathNavRatio: 60,
   treeCollapsed: new Set(),
   treeExpanded: new Set(),
   tableSort: { key: 'path', direction: 'asc' },
@@ -332,9 +334,13 @@ const viewer = $('#viewer');
 const workspace = $('.workspace');
 const compareInputPanel = $('#compare-input-panel');
 let resultCodeView = null;
+let pathPreviewView = null;
+let pathPreviewTimer;
+let syncingPathPreview = false;
 let originalCodeView = null;
 let graphModulePromise;
 let graphCleanup = null;
+let pathPreviewResizing = false;
 const formatLabel = (format) =>
   ({ jsonl: 'JSONL', ndjson: 'NDJSON', yaml: 'YAML', toml: 'TOML', csv: 'CSV', log: 'LOG' })[
     format
@@ -500,16 +506,111 @@ function escapeHtml(value) {
 function renderPathPanel() {
   const explorer = $('#path-explorer');
   if (!explorer || !state.shown) return;
+  clearTimeout(pathPreviewTimer);
+  pathPreviewView?.destroy();
+  pathPreviewView = null;
   const selectedNode = findPath(state.shown, state.selected);
   const navigationPath =
     selectedNode?.type === 'object' || selectedNode?.type === 'array'
       ? state.selected
       : nearestContainerPath(state.shown, state.selected);
-  explorer.innerHTML = `<div class="path-explorer-heading"><strong>路径</strong><code>${escapeHtml(state.selected)}</code><span>直接编辑字段名和值</span></div>${renderColumns(state.shown, navigationPath, state.query)}`;
+  const previewNode =
+    state.pathPreviewMode === 'full' ? state.shown : (selectedNode ?? state.shown);
+  const previewText = stringify(previewNode);
+  explorer.innerHTML = `<div class="path-explorer-heading"><strong>路径</strong><code>${escapeHtml(state.selected)}</code><span>直接编辑字段名和值</span></div><div class="path-explorer-body"><div class="path-columns-host">${renderColumns(state.shown, navigationPath, state.query)}</div><div class="path-preview-splitter" data-path-preview-splitter role="separator" aria-label="调整路径浏览与 JSON 编辑区宽度" aria-orientation="vertical" tabindex="0"></div><aside class="path-preview-panel" aria-label="JSON 内容编辑"><div class="path-preview-toolbar"><div class="path-preview-tabs" role="tablist" aria-label="预览内容范围"><button type="button" data-preview-mode="selected" class="${state.pathPreviewMode === 'selected' ? 'active' : ''}" aria-pressed="${state.pathPreviewMode === 'selected'}">所选内容</button><button type="button" data-preview-mode="full" class="${state.pathPreviewMode === 'full' ? 'active' : ''}" aria-pressed="${state.pathPreviewMode === 'full'}">完整结果</button></div><span id="path-preview-status">编辑即同步</span><button class="path-preview-copy" type="button" data-path-preview-copy>复制</button></div><div id="path-preview-editor" class="path-preview-editor" aria-label="可编辑 JSON 预览"></div></aside></div>`;
+  explorer.style.setProperty('--path-nav-width', `${state.pathNavRatio}%`);
+  pathPreviewView = createCodeEditor(
+    $('#path-preview-editor'),
+    previewText,
+    'json',
+    false,
+    '编辑 JSON，合法内容会自动同步…',
+    (text) => {
+      if (!syncingPathPreview) schedulePathPreviewUpdate(text);
+    },
+  );
+}
+
+function syncPathPreviewSelection() {
+  if (!pathPreviewView || state.pathPreviewMode !== 'selected') return;
+  const selectedNode = findPath(state.shown, state.selected) ?? state.shown;
+  const nextText = stringify(selectedNode);
+  if (pathPreviewView.state.doc.toString() === nextText) return;
+  clearTimeout(pathPreviewTimer);
+  syncingPathPreview = true;
+  pathPreviewView.dispatch({
+    changes: { from: 0, to: pathPreviewView.state.doc.length, insert: nextText },
+  });
+  syncingPathPreview = false;
+  const status = $('#path-preview-status');
+  if (status) {
+    status.textContent = '编辑即同步';
+    delete status.dataset.state;
+  }
+}
+
+function schedulePathPreviewUpdate(text) {
+  clearTimeout(pathPreviewTimer);
+  const mode = state.pathPreviewMode;
+  const selectedPath = state.selected;
+  pathPreviewTimer = setTimeout(() => {
+    try {
+      const editedNode = parseInput(text, 'json');
+      const updated =
+        mode === 'full' ? editedNode : replacePath(state.shown, selectedPath, editedNode);
+      if (updated === state.shown) throw new Error('所选路径已不存在，请重新选择。');
+      applyPathPreviewUpdate(updated, mode === 'full' ? '$' : selectedPath);
+      const status = $('#path-preview-status');
+      if (status) {
+        status.textContent = '已同步';
+        status.dataset.state = 'valid';
+      }
+    } catch (error) {
+      const status = $('#path-preview-status');
+      if (status) {
+        status.textContent = `未同步：${error.message}`;
+        status.dataset.state = 'error';
+      }
+    }
+  }, 300);
+}
+
+function applyPathPreviewUpdate(updated, selectedPath) {
+  const text = serializeNode(updated, state.format);
+  source.value = text;
+  const active = state.documents.find((item) => item.id === state.activeDocumentId);
+  if (active) {
+    active.originalText = text;
+    active.originalFormat = state.format;
+  }
+  syncOriginalSourceView(text, state.format);
+  setSourceLanguage(state.format);
+  updateInputExtension(state.format);
+  state.root = parseInput(text, state.format);
+  state.shown = state.expand ? expandNested(state.root, getDepthLimit()) : state.root;
+  state.selected = findPath(state.shown, selectedPath) ? selectedPath : '$';
+  syncActiveDocument();
+  $('#input-format-label').textContent = formatLabel(state.format);
+  $('#input-bytes').textContent = `${new Blob([text]).size.toLocaleString()} B`;
+  $('#stats').textContent =
+    `${countNodes(state.shown).toLocaleString()} 个节点 · ${new Blob([stringify(state.shown)]).size.toLocaleString()} 字节`;
+  $('#status').textContent = '路径预览已同步';
+  const selectedNode = findPath(state.shown, state.selected);
+  const navigationPath =
+    selectedNode?.type === 'object' || selectedNode?.type === 'array'
+      ? state.selected
+      : nearestContainerPath(state.shown, state.selected);
+  const columnsHost = $('#path-explorer .path-columns-host');
+  if (columnsHost) columnsHost.innerHTML = renderColumns(state.shown, navigationPath, state.query);
+  graphCleanup?.update?.(state.shown, state.selected, state.query, state.graphDirection);
+  updateCrumbs();
 }
 
 function render() {
   const mode = state.mode;
+  clearTimeout(pathPreviewTimer);
+  pathPreviewView?.destroy();
+  pathPreviewView = null;
   workspace.classList.toggle('compare-mode', mode === 'compare');
   compareInputPanel.classList.toggle('hidden', mode !== 'compare');
   if (!state.shown && mode !== 'compare') {
@@ -1231,6 +1332,21 @@ function selectEditorPath(path) {
   }
 }
 viewer.addEventListener('click', (event) => {
+  if (event.target.closest('[data-path-preview-copy]')) {
+    const button = event.target.closest('[data-path-preview-copy]');
+    navigator.clipboard.writeText(pathPreviewView?.state.doc.toString() ?? '');
+    button.textContent = '已复制';
+    setTimeout(() => {
+      if (button.isConnected) button.textContent = '复制';
+    }, 1200);
+    return;
+  }
+  const previewModeButton = event.target.closest('[data-preview-mode]');
+  if (previewModeButton) {
+    state.pathPreviewMode = previewModeButton.dataset.previewMode;
+    renderPathPanel();
+    return;
+  }
   if (event.target.closest('#graph-direction-toggle')) {
     state.graphDirection = state.graphDirection === 'LR' ? 'TB' : 'LR';
     render();
@@ -1270,6 +1386,7 @@ viewer.addEventListener('click', (event) => {
       .querySelectorAll('.path-item.selected')
       .forEach((item) => item.classList.remove('selected'));
     editorInput.closest('.path-item')?.classList.add('selected');
+    syncPathPreviewSelection();
     graphCleanup?.select?.(nearestContainerPath(state.shown, state.selected));
     return;
   }
@@ -1311,6 +1428,35 @@ viewer.addEventListener('click', (event) => {
     .forEach((item) => item.classList.remove('selected'));
   row.classList.add('selected');
 });
+viewer.addEventListener('pointerdown', (event) => {
+  const splitter = event.target.closest('[data-path-preview-splitter]');
+  if (!splitter) return;
+  pathPreviewResizing = true;
+  splitter.setPointerCapture(event.pointerId);
+  splitter.classList.add('dragging');
+  event.preventDefault();
+});
+viewer.addEventListener('pointermove', (event) => {
+  if (!pathPreviewResizing) return;
+  const body =
+    event.target.closest('.path-explorer-body') ?? $('#path-explorer .path-explorer-body');
+  if (!body) return;
+  const bounds = body.getBoundingClientRect();
+  const vertical = window.matchMedia('(max-width: 560px)').matches;
+  const position = vertical ? event.clientY - bounds.top : event.clientX - bounds.left;
+  const length = vertical ? bounds.height : bounds.width;
+  state.pathNavRatio = Math.max(30, Math.min(75, (position / length) * 100));
+  $('#path-explorer').style.setProperty(
+    vertical ? '--path-nav-height' : '--path-nav-width',
+    `${state.pathNavRatio}%`,
+  );
+});
+const stopPathPreviewResize = () => {
+  pathPreviewResizing = false;
+  viewer.querySelector('[data-path-preview-splitter]')?.classList.remove('dragging');
+};
+viewer.addEventListener('pointerup', stopPathPreviewResize);
+viewer.addEventListener('pointercancel', stopPathPreviewResize);
 function commitPathUpdate(updated, selectedPath = state.selected) {
   const text = serializeNode(updated, state.format);
   source.value = text;
@@ -1376,6 +1522,20 @@ viewer.addEventListener('change', (event) => {
   }
 });
 viewer.addEventListener('keydown', (event) => {
+  if (event.target.matches('[data-path-preview-splitter]')) {
+    const vertical = window.matchMedia('(max-width: 560px)').matches;
+    if ((!vertical && event.key === 'ArrowLeft') || (vertical && event.key === 'ArrowUp'))
+      state.pathNavRatio = Math.max(30, state.pathNavRatio - 2);
+    else if ((!vertical && event.key === 'ArrowRight') || (vertical && event.key === 'ArrowDown'))
+      state.pathNavRatio = Math.min(75, state.pathNavRatio + 2);
+    else return;
+    $('#path-explorer').style.setProperty(
+      vertical ? '--path-nav-height' : '--path-nav-width',
+      `${state.pathNavRatio}%`,
+    );
+    event.preventDefault();
+    return;
+  }
   if (event.key === 'Enter' && event.target.matches('.path-key-input, .path-value-input')) {
     event.preventDefault();
     event.target.blur();

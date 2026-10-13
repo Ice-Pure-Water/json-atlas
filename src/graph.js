@@ -475,6 +475,16 @@ function FlowCanvas({ graph, onSelect, onEdit, registerSelect }) {
   const flow = useReactFlow();
   const [nodes, setNodes] = useState(graph.nodes);
   const [edges, setEdges] = useState(graph.edges);
+  useEffect(() => {
+    setNodes((current) => {
+      const positions = new Map(current.map((node) => [node.id, node.position]));
+      return graph.nodes.map((node) => ({
+        ...node,
+        position: positions.get(node.id) ?? node.position,
+      }));
+    });
+    setEdges(graph.edges);
+  }, [graph.nodes, graph.edges]);
   const onNodesChange = (changes) => setNodes((current) => applyNodeChanges(changes, current));
   const onEdgesChange = (changes) => setEdges((current) => applyEdgeChanges(changes, current));
   useEffect(() => {
@@ -568,20 +578,25 @@ function GraphApp({ node, selectedPath, query, onSelect, onEdit, direction, regi
 export function mountGraph(element, node, selectedPath, query, onSelect, onEdit, direction = 'LR') {
   const root = createRoot(element);
   let select = () => {};
-  root.render(
-    h(GraphApp, {
-      node,
-      selectedPath,
-      query,
-      onSelect,
-      onEdit,
-      direction,
-      registerSelect: (handler) => {
-        select = handler;
-      },
-    }),
-  );
+  const renderGraph = (nextNode, nextSelectedPath, nextQuery, nextDirection) => {
+    root.render(
+      h(GraphApp, {
+        node: nextNode,
+        selectedPath: nextSelectedPath,
+        query: nextQuery,
+        onSelect,
+        onEdit,
+        direction: nextDirection,
+        registerSelect: (handler) => {
+          select = handler;
+        },
+      }),
+    );
+  };
+  renderGraph(node, selectedPath, query, direction);
   const cleanup = () => root.unmount();
   cleanup.select = (path) => select(path);
+  cleanup.update = (nextNode, nextSelectedPath, nextQuery, nextDirection) =>
+    renderGraph(nextNode, nextSelectedPath, nextQuery, nextDirection);
   return cleanup;
 }
