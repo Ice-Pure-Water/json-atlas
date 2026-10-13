@@ -30,8 +30,8 @@ The result renderer replaces the view component when the selected mode changes:
 - `graph`: `src/graph.js` builds graph nodes from the tagged tree and renders them through React Flow. Card child values navigate down; a nested card header navigates to its parent. Layout order follows source order.
 - `tree`: `vanilla-jsoneditor` displays and edits the tree. Changes flow back to the working source.
 - `table`: Tabulator displays a recursive data tree.
-- `columns`: the app renders navigable path columns.
-- `source` and `original`: CodeMirror displays the editable formatted copy or original-source snapshot.
+- `graph`: React Flow and editable path columns render together. Selection stays synchronized; the path pane can replace a selected node value while preserving the document format.
+- `editor`: CodeMirror displays the editable formatted copy above the collapsible, read-only original-source snapshot.
 - `compare`: two CodeMirror editors feed a structural diff. The right pane renders the merged data and scrolls in sync with both editors.
 
 Input parsing and conversion are kept separate from view code in `src/core.js`. `src/landing.js` is likewise a small entry point: it mounts the product page from `src/landing/shell.js` and attaches the same theme controller used by the workbench. Browser-only libraries are loaded by the workbench controller.

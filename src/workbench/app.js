@@ -19,7 +19,14 @@ import { EditorView, keymap, placeholder } from '@codemirror/view';
 import { indentWithTab } from '@codemirror/commands';
 import { mountThemeControls } from '../shared/theme.js';
 import { mountWorkspaceShell } from './shell.js';
-import { countNodes, findPath, renderColumns, toTableRows } from './data-views.js';
+import {
+  countNodes,
+  findPath,
+  nearestContainerPath,
+  renderColumns,
+  replacePath,
+  toTableRows,
+} from './data-views.js';
 import { renderDiffByFormat } from './diff-renderer.js';
 import {
   autoFormatEditor,
@@ -53,6 +60,7 @@ const state = {
   graphDirection: 'LR',
   lastDataMode: 'graph',
   selected: '$',
+  originalSourceOpen: true,
   query: '',
   expand: true,
   compare: false,
@@ -204,6 +212,7 @@ const workspace = $('.workspace');
 const compareInputPanel = $('#compare-input-panel');
 let jsonEditor = null;
 let resultCodeView = null;
+let originalCodeView = null;
 let dataTable = null;
 let tableModulePromise;
 let graphModulePromise;
@@ -238,6 +247,8 @@ function resetResultView() {
   jsonEditor = null;
   resultCodeView?.destroy();
   resultCodeView = null;
+  originalCodeView?.destroy();
+  originalCodeView = null;
   dataTable?.destroy();
   dataTable = null;
   graphCleanup?.();
@@ -333,21 +344,24 @@ function escapeHtml(value) {
     (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char],
   );
 }
+function renderPathPanel() {
+  const explorer = $('#path-explorer');
+  if (!explorer || !state.shown) return;
+  const selectedNode = findPath(state.shown, state.selected) ?? state.shown;
+  explorer.innerHTML = `<div class="path-explorer-layout">${renderColumns(state.shown, state.selected, state.query)}<section class="path-editor-panel"><div class="path-editor-heading"><span>编辑当前值</span><code>${escapeHtml(state.selected)}</code></div><textarea id="path-value-editor" spellcheck="false" aria-label="JSON 路径值">${escapeHtml(stringify(selectedNode, 2))}</textarea><button id="apply-path-value" class="button button-dark" type="button">应用修改</button><div id="path-edit-error" class="path-edit-error" role="status">输入合法 JSON 后应用；字符串值请保留引号。</div></section></div>`;
+}
+
 function render() {
   const mode = state.mode;
-  const directionButton = $('#graph-direction-toggle');
-  directionButton.hidden = mode !== 'graph';
-  directionButton.innerHTML =
-    state.graphDirection === 'LR' ? '↕ <span>纵向</span>' : '↔ <span>横向</span>';
-  directionButton.title = `切换为${state.graphDirection === 'LR' ? '纵向' : '横向'}布局`;
-  directionButton.setAttribute('aria-label', directionButton.title);
   workspace.classList.toggle('compare-mode', mode === 'compare');
   compareInputPanel.classList.toggle('hidden', mode !== 'compare');
-  if (!state.shown && mode !== 'compare' && mode !== 'original') {
+  if (!state.shown && mode !== 'compare') {
     jsonEditor?.destroy();
     jsonEditor = null;
     resultCodeView?.destroy();
     resultCodeView = null;
+    originalCodeView?.destroy();
+    originalCodeView = null;
     dataTable?.destroy();
     dataTable = null;
     graphCleanup?.();
@@ -379,6 +393,8 @@ function render() {
   jsonEditor = null;
   resultCodeView?.destroy();
   resultCodeView = null;
+  originalCodeView?.destroy();
+  originalCodeView = null;
   dataTable?.destroy();
   dataTable = null;
   graphCleanup?.();
@@ -400,23 +416,20 @@ function render() {
     if (comparisonSource.value.trim()) runDiff();
     else syncCompareScroll();
     return;
-  } else if (mode === 'original') {
+  } else if (mode === 'editor') {
     const active = state.documents.find((item) => item.id === state.activeDocumentId);
     const originalText = active?.originalText ?? active?.text ?? '';
-    viewer.innerHTML = '<div class="source-editor-host result-code-editor"></div>';
-    resultCodeView = createCodeEditor(
-      viewer.firstElementChild,
+    viewer.innerHTML = `<div class="editor-stack"><section class="formatted-source-pane"><div class="stacked-editor-heading"><strong>格式化源码</strong><span>可编辑</span></div><div class="source-editor-host result-code-editor" id="formatted-source-editor"></div></section><details class="original-source-pane" id="original-source-section" ${state.originalSourceOpen ? 'open' : ''}><summary><strong>原始源码</strong><span>只读 · 点击折叠</span></summary><div class="source-editor-host result-code-editor" id="original-source-editor"></div></details></div>`;
+    $('#original-source-section').addEventListener('toggle', (event) => {
+      state.originalSourceOpen = event.currentTarget.open;
+    });
+    resultCodeView = createCodeEditor($('#formatted-source-editor'), source.value, state.format);
+    originalCodeView = createCodeEditor(
+      $('#original-source-editor'),
       originalText,
       active?.originalFormat ?? state.format,
       true,
     );
-    $('#status').textContent = '原始输入 · 只读';
-    $('#stats').textContent = `${new Blob([originalText]).size.toLocaleString()} 字节`;
-    $('#input-bytes').textContent = `${new Blob([source.value]).size.toLocaleString()} B`;
-    return;
-  } else if (mode === 'source') {
-    viewer.innerHTML = '<div class="source-editor-host result-code-editor"></div>';
-    resultCodeView = createCodeEditor(viewer.firstElementChild, source.value, state.format);
     resultCodeView.dom.addEventListener('input', () => {
       const text = resultCodeView.state.doc.toString();
       source.value = text;
@@ -480,8 +493,9 @@ function render() {
         if (host.isConnected) host.textContent = `表格视图加载失败：${error.message}`;
       });
   } else if (mode === 'graph') {
-    viewer.innerHTML = '<div class="graph-view-host"></div>';
-    const host = viewer.firstElementChild;
+    viewer.innerHTML = `<div class="graph-path-workspace"><section class="graph-panel"><div class="graph-panel-toolbar"><strong>关系图</strong><button id="graph-direction-toggle" class="graph-direction-toggle" type="button" title="切换布局方向">${state.graphDirection === 'LR' ? '↕ 纵向' : '↔ 横向'}</button></div><div class="graph-view-host"></div></section><section id="path-explorer" class="path-explorer" aria-label="路径导航与编辑"></section></div>`;
+    const host = viewer.querySelector('.graph-view-host');
+    renderPathPanel();
     graphModulePromise ??= import('../graph.js');
     graphModulePromise
       .then(({ mountGraph }) => {
@@ -494,6 +508,7 @@ function render() {
           (path) => {
             state.selected = path;
             updateCrumbs();
+            renderPathPanel();
           },
           state.graphDirection,
         );
@@ -616,6 +631,8 @@ function parseAndRender() {
     jsonEditor = null;
     resultCodeView?.destroy();
     resultCodeView = null;
+    originalCodeView?.destroy();
+    originalCodeView = null;
     dataTable?.destroy();
     dataTable = null;
     graphCleanup?.();
@@ -805,7 +822,7 @@ $('#expand-toggle').addEventListener('change', (event) => {
 $('#depth').addEventListener('change', parseAndRender);
 $('#search').addEventListener('input', (event) => {
   state.query = event.target.value;
-  if (['graph', 'columns', 'table'].includes(state.mode)) render();
+  if (['graph', 'table'].includes(state.mode)) render();
 });
 document.querySelectorAll('.view-tabs button').forEach((button) =>
   button.addEventListener('click', () => {
@@ -819,10 +836,6 @@ document.querySelectorAll('.view-tabs button').forEach((button) =>
     render();
   }),
 );
-$('#graph-direction-toggle').addEventListener('click', () => {
-  state.graphDirection = state.graphDirection === 'LR' ? 'TB' : 'LR';
-  render();
-});
 $('#editor-view-toggle').addEventListener('click', () => {
   state.mode = state.lastDataMode || 'graph';
   $('#compare-toggle').classList.remove('active');
@@ -1151,6 +1164,46 @@ function selectEditorPath(path) {
   }
 }
 viewer.addEventListener('click', (event) => {
+  if (event.target.closest('#graph-direction-toggle')) {
+    state.graphDirection = state.graphDirection === 'LR' ? 'TB' : 'LR';
+    render();
+    return;
+  }
+  const pathItem = event.target.closest('.path-item[data-path]');
+  if (pathItem) {
+    state.selected = pathItem.dataset.path;
+    updateCrumbs();
+    renderPathPanel();
+    graphCleanup?.select?.(nearestContainerPath(state.shown, state.selected));
+    return;
+  }
+  if (event.target.closest('#apply-path-value')) {
+    try {
+      const replacement = parseInput($('#path-value-editor').value, 'json');
+      const updated = replacePath(state.shown, state.selected, replacement);
+      if (updated === state.shown && state.selected !== '$') {
+        throw new Error('找不到当前路径，请重新选择节点。');
+      }
+      const text = serializeNode(updated, state.format);
+      source.value = text;
+      setSourceLanguage(state.format);
+      updateInputExtension(state.format);
+      state.root = parseInput(text, state.format);
+      state.shown = state.expand ? expandNested(state.root, getDepthLimit()) : state.root;
+      syncActiveDocument();
+      $('#input-format-label').textContent = formatLabel(state.format);
+      $('#input-bytes').textContent = `${new Blob([text]).size.toLocaleString()} B`;
+      render();
+      $('#status').textContent = '路径值已更新';
+    } catch (error) {
+      if (error instanceof SyntaxError) {
+        $('#path-edit-error').textContent = `JSON 格式无效：${error.message}`;
+      } else {
+        $('#path-edit-error').textContent = `无法应用修改：${error.message}`;
+      }
+    }
+    return;
+  }
   const row = event.target.closest('.merged-line[data-path]');
   if (!row) return;
   const path = row.dataset.path;

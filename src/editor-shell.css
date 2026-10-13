@@ -432,6 +432,7 @@ body.workspace-page {
 .viewer.mode-table,
 .viewer.mode-columns,
 .viewer.mode-source,
+.viewer.mode-editor,
 .viewer.mode-compare {
   background: #fff;
 }
@@ -876,6 +877,7 @@ body.workspace-page,
 .viewer.mode-table,
 .viewer.mode-columns,
 .viewer.mode-source,
+.viewer.mode-editor,
 .viewer.mode-compare {
   background: #fff;
 }

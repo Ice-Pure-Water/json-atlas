@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import {
   applyEdgeChanges,
@@ -405,12 +405,27 @@ function JsonCard({ data }) {
 }
 
 const nodeTypes = { jsonCard: JsonCard };
-function FlowCanvas({ graph, onSelect }) {
+function FlowCanvas({ graph, onSelect, registerSelect }) {
   const flow = useReactFlow();
   const [nodes, setNodes] = useState(graph.nodes);
   const [edges, setEdges] = useState(graph.edges);
   const onNodesChange = (changes) => setNodes((current) => applyNodeChanges(changes, current));
   const onEdgesChange = (changes) => setEdges((current) => applyEdgeChanges(changes, current));
+  useEffect(() => {
+    registerSelect((path) => {
+      if (!graph.nodes.some((node) => node.id === path)) return;
+      setNodes((current) => current.map((node) => ({ ...node, selected: node.id === path })));
+      requestAnimationFrame(() =>
+        flow.fitView({
+          nodes: [{ id: path }],
+          padding: 0.28,
+          minZoom: 0.55,
+          maxZoom: 1.4,
+          duration: 320,
+        }),
+      );
+    });
+  }, [flow, graph.nodes, registerSelect]);
   const onNodeClick = (_event, node) => {
     setNodes((current) => current.map((item) => ({ ...item, selected: item.id === node.id })));
     onSelect(node.id);
@@ -480,16 +495,30 @@ function FlowCanvas({ graph, onSelect }) {
   );
 }
 
-function GraphApp({ node, selectedPath, query, onSelect, direction }) {
+function GraphApp({ node, selectedPath, query, onSelect, direction, registerSelect }) {
   const graph = useMemo(
     () => createGraph(node, selectedPath, query, direction),
     [node, selectedPath, query, direction],
   );
-  return h(ReactFlowProvider, null, h(FlowCanvas, { graph, onSelect }));
+  return h(ReactFlowProvider, null, h(FlowCanvas, { graph, onSelect, registerSelect }));
 }
 
 export function mountGraph(element, node, selectedPath, query, onSelect, direction = 'LR') {
   const root = createRoot(element);
-  root.render(h(GraphApp, { node, selectedPath, query, onSelect, direction }));
-  return () => root.unmount();
+  let select = () => {};
+  root.render(
+    h(GraphApp, {
+      node,
+      selectedPath,
+      query,
+      onSelect,
+      direction,
+      registerSelect: (handler) => {
+        select = handler;
+      },
+    }),
+  );
+  const cleanup = () => root.unmount();
+  cleanup.select = (path) => select(path);
+  return cleanup;
 }

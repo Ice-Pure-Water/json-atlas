@@ -55,6 +55,48 @@ export function findPath(node, path, current = '$') {
   return null;
 }
 
+export function nearestContainerPath(node, targetPath, currentPath = '$', nearestPath = '$') {
+  if (currentPath === targetPath) {
+    return ['object', 'array'].includes(node.type) ? currentPath : nearestPath;
+  }
+  const containerPath = ['object', 'array'].includes(node.type) ? currentPath : nearestPath;
+  for (const [key, child] of children(node)) {
+    const childPath = node.type === 'array' ? `${currentPath}[${key}]` : `${currentPath}.${key}`;
+    if (
+      targetPath === childPath ||
+      targetPath.startsWith(`${childPath}.`) ||
+      targetPath.startsWith(`${childPath}[`)
+    ) {
+      return nearestContainerPath(child, targetPath, childPath, containerPath);
+    }
+  }
+  return containerPath;
+}
+
+export function replacePath(node, targetPath, replacement, currentPath = '$') {
+  if (currentPath === targetPath) return replacement;
+  if (node.type === 'object') {
+    let changed = false;
+    const entries = node.entries.map(({ key, value }) => {
+      const childPath = `${currentPath}.${key}`;
+      const nextValue = replacePath(value, targetPath, replacement, childPath);
+      changed ||= nextValue !== value;
+      return nextValue === value ? { key, value } : { key, value: nextValue };
+    });
+    return changed ? { ...node, entries } : node;
+  }
+  if (node.type === 'array') {
+    let changed = false;
+    const items = node.items.map((value, index) => {
+      const nextValue = replacePath(value, targetPath, replacement, `${currentPath}[${index}]`);
+      changed ||= nextValue !== value;
+      return nextValue;
+    });
+    return changed ? { ...node, items } : node;
+  }
+  return node;
+}
+
 export function matchesQuery(node, path, label, query) {
   return (
     `${label} ${valueText(node)} ${path}`.toLowerCase().includes(query.toLowerCase()) ||
