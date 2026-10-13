@@ -9,7 +9,7 @@ JSON Atlas is a free, open-source data workbench for inspecting, formatting, com
 - **Input formats:** JSON, JSONL, NDJSON, YAML, TOML, CSV, and JSON values embedded in mixed log text.
 - **Nested JSON expansion:** recursively expands strings containing a complete JSON object or array, up to a configurable depth. Text that merely contains braces stays text.
 - **Lossless JSON numbers:** preserves the original spelling of large and high precision JSON numbers during parsing and JSON output.
-- **Linked views:** inspect the same parsed document in a relationship graph, tree, or recursive table. The graph and editable path panel appear together; the source pane keeps the editable original input above the editable formatted content.
+- **Linked views:** inspect the same parsed document in a relationship graph, tree, or sortable table. The graph and editable path navigator appear together with an editable JSON panel for the selected node or full result; valid edits synchronize with the workbench immediately.
 - **Document comparison:** edit two documents side by side and view their merged structure with additions, removals, and changes highlighted. Scrolling is synchronized.
 - **Conversion:** format or compact JSON, sort object keys, and export JSON, JSONL, YAML, TOML, CSV, or TypeScript types where the target format supports the data.
 - **Appearance:** system, light, and dark themes. The selected theme is shared by the landing page and workbench.
@@ -41,7 +41,7 @@ The public demo is hosted on GitHub Pages: <https://ice-pure-water.github.io/jso
 
 1. Paste data into the editor, load the example, or import a local file. Imported file extensions select the input format.
 2. The editor formats valid input automatically. Choose another format in the format selector to convert the current document where conversion is supported.
-3. Switch among graph, tree, and table using the result-pane tabs. The graph supports horizontal and vertical layouts; edit primitive values and object keys in place, click a nested value to open its card, and click that card's header to return to its parent. Graph and path edits update both source editors.
+3. Switch among graph, tree, and table using the result-pane tabs. The graph supports horizontal and vertical layouts; edit primitive values and object keys in place, click a nested value to open its card, and click that card's header to return to its parent. In the path area, edit fields directly or edit the selected node/full JSON in the side panel. Valid JSON edits synchronize with the graph and both source editors; invalid drafts remain in the panel with an error message until corrected.
 4. Select **比较** to compare another document. On first open, the current document is copied into the comparison editor as a starting point; replace or edit it to see differences. It follows the current document's format. The third pane displays the merged result and highlights changes; scrolling across all three panes stays synchronized. Select **返回查看** in the same toolbar location to leave comparison mode.
 5. Select **转换** for compact JSON, sorted JSON, CSV, YAML, TOML, or TypeScript output.
 
@@ -91,7 +91,7 @@ PRIVACY.md            Local processing and hosting boundary
   ISSUE_TEMPLATE/     Bug and feature request forms
 ```
 
-The application uses `lossless-json` for JSON number preservation, CodeMirror for source editing, `vanilla-jsoneditor` for tree/source display, Tabulator for the recursive table, React Flow for the graph, `yaml` for YAML, `smol-toml` for TOML, and Papa Parse for CSV. The graph layout is implemented by this project; it does not depend on Dagre.
+The application uses `lossless-json` for JSON number preservation, CodeMirror for source and JSON preview editing, a project-native tree and sortable table, React Flow for the graph, `yaml` for YAML, `smol-toml` for TOML, and Papa Parse for CSV. The graph layout is implemented by this project; it does not depend on Dagre.
 
 ## Development and verification
 
@@ -118,7 +118,7 @@ JSON Atlas 是免费的开源结构化数据工作台，用于查看、整理、
 - **输入格式：** JSON、JSONL、NDJSON、YAML、TOML、CSV，以及混合日志中的 JSON 数据提取。
 - **嵌套 JSON 展开：** 递归展开完整 JSON 对象或数组字符串，最大深度可调整。普通文本中仅包含花括号时会保留原文。
 - **精确保留 JSON 数字：** 解析和 JSON 导出时保留大整数及高精度数字的原始文本，避免 JavaScript 数值精度损失。
-- **多种联动视图：** 在关系图、树形和递归表格间切换。关系图与可编辑路径上下联动；左侧源码区上方是可编辑原始输入，下方是可编辑格式化内容。
+- **多种联动视图：** 在关系图、树形和可排序表格间切换。关系图与可编辑路径上下联动；路径侧栏可编辑所选节点 JSON 或完整结果，合法内容即时同步到关系图和两个源码编辑区。
 - **文档比较：** 并排编辑两份文档，在融合结果中标记新增、删除和修改；三个区域支持滚动同步。
 - **格式转换：** 格式化或压缩 JSON、排序对象键，并按目标格式能力导出 JSON、JSONL、YAML、TOML、CSV 或 TypeScript 类型。
 - **三种主题：** 跟随系统、浅色和深色。主页和工作台共用主题设置。
@@ -149,7 +149,7 @@ npm run preview # 本地预览生产构建
 
 1. 在编辑器粘贴数据、载入示例或导入本地文件。导入时根据文件扩展名选择输入格式。
 2. 有效输入会自动格式化。也可以在格式选择器中选择其他格式，对当前文档进行支持范围内的转换。
-3. 在关系图、树形和表格间切换。关系图与路径面板上下同步展示，支持横向和纵向布局；可直接修改图卡或路径中的字段名和值。点击嵌套值进入下级卡片，点击卡片表头返回父级；修改会同步到两个源码编辑区和其他视图。
+3. 在关系图、树形和表格间切换。关系图与路径面板上下同步展示，支持横向和纵向布局；可直接修改图卡或路径中的字段名和值。路径右侧可切换编辑所选节点或完整结果，合法 JSON 修改即时同步到图、路径和两个源码编辑区；无效 JSON 会保留为草稿并显示错误。点击嵌套值进入下级卡片，点击卡片表头返回父级。
 4. 点击**比较**对照另一份文档。首次打开时，会将当前文档复制到对比编辑区作为起点；随后可直接替换或修改内容查看差异。对比格式跟随当前文档。第三个区域显示融合结果并标出差异；三个区域支持滚动同步。点击同一位置的**返回查看**回到之前的数据视图。
 5. 点击**转换**，可生成压缩 JSON、键排序后的 JSON、CSV、YAML、TOML 或 TypeScript 类型。
 
@@ -202,7 +202,7 @@ PRIVACY.md            本地处理及托管边界
   ISSUE_TEMPLATE/     问题反馈与功能建议模板
 ```
 
-项目使用 `lossless-json` 保留 JSON 数字原文，使用 CodeMirror 编辑源码、`vanilla-jsoneditor` 展示树和源码、Tabulator 展示递归表格、React Flow 绘制关系图，并使用 `yaml`、`smol-toml` 和 Papa Parse 处理 YAML、TOML 和 CSV。关系图布局由本项目实现，不依赖 Dagre。
+项目使用 `lossless-json` 保留 JSON 数字原文，使用 CodeMirror 编辑源码和 JSON 预览，树形和可排序表格由项目原生组件展示，使用 React Flow 绘制关系图，并使用 `yaml`、`smol-toml` 和 Papa Parse 处理 YAML、TOML 和 CSV。关系图布局由本项目实现，不依赖 Dagre。
 
 ### 开发和验证
 
