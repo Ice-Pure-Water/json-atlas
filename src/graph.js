@@ -471,7 +471,14 @@ function JsonCard({ data }) {
 }
 
 const nodeTypes = { jsonCard: JsonCard };
-function FlowCanvas({ graph, onSelect, onEdit, registerSelect }) {
+function FlowCanvas({
+  graph,
+  onSelect,
+  onEdit,
+  registerSelect,
+  registerViewport,
+  initialViewport,
+}) {
   const flow = useReactFlow();
   const [nodes, setNodes] = useState(graph.nodes);
   const [edges, setEdges] = useState(graph.edges);
@@ -487,21 +494,29 @@ function FlowCanvas({ graph, onSelect, onEdit, registerSelect }) {
   }, [graph.nodes, graph.edges]);
   const onNodesChange = (changes) => setNodes((current) => applyNodeChanges(changes, current));
   const onEdgesChange = (changes) => setEdges((current) => applyEdgeChanges(changes, current));
+  const focusNode = useCallback(
+    (path) => {
+      const node = flow.getNode(path);
+      if (!node) return;
+      const width = node.measured?.width ?? node.width ?? NODE_WIDTH;
+      const height = node.measured?.height ?? node.height ?? node.data?.height ?? 120;
+      flow.setCenter(node.position.x + width / 2, node.position.y + height / 2, {
+        zoom: flow.getZoom(),
+        duration: 320,
+      });
+    },
+    [flow],
+  );
+  useEffect(() => {
+    registerViewport(() => flow.getViewport());
+  }, [flow, registerViewport]);
   useEffect(() => {
     registerSelect((path) => {
       if (!graph.nodes.some((node) => node.id === path)) return;
       setNodes((current) => current.map((node) => ({ ...node, selected: node.id === path })));
-      requestAnimationFrame(() =>
-        flow.fitView({
-          nodes: [{ id: path }],
-          padding: 0.28,
-          minZoom: 0.55,
-          maxZoom: 1.4,
-          duration: 320,
-        }),
-      );
+      requestAnimationFrame(() => focusNode(path));
     });
-  }, [flow, graph.nodes, registerSelect]);
+  }, [focusNode, graph.nodes, registerSelect]);
   const onNodeClick = (_event, node) => {
     setNodes((current) => current.map((item) => ({ ...item, selected: item.id === node.id })));
     onSelect(node.id);
@@ -511,30 +526,33 @@ function FlowCanvas({ graph, onSelect, onEdit, registerSelect }) {
       if (!graph.nodes.some((node) => node.id === path)) return;
       setNodes((current) => current.map((node) => ({ ...node, selected: node.id === path })));
       onSelect(path);
-      requestAnimationFrame(() =>
-        flow.fitView({
-          nodes: [{ id: path }],
-          padding: 0.28,
-          minZoom: 0.55,
-          maxZoom: 1.4,
-          duration: 320,
-        }),
-      );
+      requestAnimationFrame(() => focusNode(path));
     },
-    [flow, graph.nodes, onSelect],
+    [focusNode, graph.nodes, onSelect],
   );
   const renderedNodes = useMemo(
     () => nodes.map((node) => ({ ...node, data: { ...node.data, onNavigate, onEdit } })),
     [nodes, onNavigate, onEdit],
   );
   const onInit = (instance) =>
-    requestAnimationFrame(() =>
-      instance.fitView({
-        padding: 0.12,
-        maxZoom: 1,
-        duration: 180,
-      }),
-    );
+    requestAnimationFrame(() => {
+      if (initialViewport) {
+        instance.setViewport(initialViewport, { duration: 0 });
+      } else if (
+        graph.initialFocusPath &&
+        graph.nodes.some((node) => node.id === graph.initialFocusPath)
+      ) {
+        instance.fitView({
+          nodes: [{ id: graph.initialFocusPath }],
+          padding: 0.28,
+          minZoom: 0.55,
+          maxZoom: 1.2,
+          duration: 180,
+        });
+      } else {
+        instance.fitView({ padding: 0.12, maxZoom: 1, duration: 180 });
+      }
+    });
   return h(
     ReactFlow,
     {
@@ -567,17 +585,50 @@ function FlowCanvas({ graph, onSelect, onEdit, registerSelect }) {
   );
 }
 
-function GraphApp({ node, selectedPath, query, onSelect, onEdit, direction, registerSelect }) {
+function GraphApp({
+  node,
+  selectedPath,
+  query,
+  onSelect,
+  onEdit,
+  direction,
+  registerSelect,
+  registerViewport,
+  initialViewport,
+}) {
   const graph = useMemo(
     () => createGraph(node, selectedPath, query, direction),
     [node, selectedPath, query, direction],
   );
-  return h(ReactFlowProvider, null, h(FlowCanvas, { graph, onSelect, onEdit, registerSelect }));
+  let initialFocusPath = selectedPath;
+  while (initialFocusPath !== '$' && !graph.nodes.some((item) => item.id === initialFocusPath)) {
+    const separator = Math.max(
+      initialFocusPath.lastIndexOf('.'),
+      initialFocusPath.lastIndexOf('['),
+    );
+    initialFocusPath = separator > 0 ? initialFocusPath.slice(0, separator) : '$';
+  }
+  graph.initialFocusPath = initialFocusPath;
+  return h(
+    ReactFlowProvider,
+    null,
+    h(FlowCanvas, { graph, onSelect, onEdit, registerSelect, registerViewport, initialViewport }),
+  );
 }
 
-export function mountGraph(element, node, selectedPath, query, onSelect, onEdit, direction = 'LR') {
+export function mountGraph(
+  element,
+  node,
+  selectedPath,
+  query,
+  onSelect,
+  onEdit,
+  direction = 'LR',
+  initialViewport = null,
+) {
   const root = createRoot(element);
   let select = () => {};
+  let getViewport = () => null;
   const renderGraph = (nextNode, nextSelectedPath, nextQuery, nextDirection) => {
     root.render(
       h(GraphApp, {
@@ -587,8 +638,12 @@ export function mountGraph(element, node, selectedPath, query, onSelect, onEdit,
         onSelect,
         onEdit,
         direction: nextDirection,
+        initialViewport,
         registerSelect: (handler) => {
           select = handler;
+        },
+        registerViewport: (handler) => {
+          getViewport = handler;
         },
       }),
     );
@@ -596,6 +651,7 @@ export function mountGraph(element, node, selectedPath, query, onSelect, onEdit,
   renderGraph(node, selectedPath, query, direction);
   const cleanup = () => root.unmount();
   cleanup.select = (path) => select(path);
+  cleanup.getViewport = () => getViewport();
   cleanup.update = (nextNode, nextSelectedPath, nextQuery, nextDirection) =>
     renderGraph(nextNode, nextSelectedPath, nextQuery, nextDirection);
   return cleanup;

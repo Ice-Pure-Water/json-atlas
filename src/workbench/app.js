@@ -59,6 +59,7 @@ const state = {
   format: 'json',
   mode: 'graph',
   graphDirection: 'LR',
+  graphViewport: null,
   lastDataMode: 'graph',
   selected: '$',
   pathPreviewMode: 'selected',
@@ -437,6 +438,7 @@ function switchDocument(id) {
   state.format = next.format;
   state.root = state.shown = null;
   state.selected = '$';
+  state.graphViewport = null;
   source.value = next.text;
   $('#input-name').textContent = next.name;
   $('#format').value = next.format;
@@ -662,6 +664,8 @@ function render() {
   viewer.className = `viewer mode-${mode}`;
   resultCodeView?.destroy();
   resultCodeView = null;
+  if (mode !== 'graph' && graphCleanup)
+    state.graphViewport = graphCleanup.getViewport?.() ?? state.graphViewport;
   graphCleanup?.();
   graphCleanup = null;
   if (mode === 'compare') {
@@ -731,6 +735,7 @@ function render() {
             }
           },
           state.graphDirection,
+          state.graphViewport,
         );
       })
       .catch((error) => {
@@ -790,6 +795,7 @@ function parseAndRender() {
   if (!text.trim()) {
     state.root = state.shown = null;
     state.selected = '$';
+    state.graphViewport = null;
     state.query = '';
     if (state.mode === 'compare') {
       render();
@@ -803,6 +809,7 @@ function parseAndRender() {
     state.root = root;
     state.shown = state.expand ? expandNested(root, Number($('#depth').value) || 25) : root;
     state.selected = '$';
+    state.graphViewport = null;
     state.query = $('#search').value;
     render();
   } catch (error) {
@@ -1493,7 +1500,27 @@ function commitPathUpdate(updated, selectedPath = state.selected) {
   syncActiveDocument();
   $('#input-format-label').textContent = formatLabel(state.format);
   $('#input-bytes').textContent = `${new Blob([text]).size.toLocaleString()} B`;
-  render();
+  if (state.mode === 'graph') {
+    $('#stats').textContent =
+      `${countNodes(state.shown).toLocaleString()} 个节点 · ${new Blob([stringify(state.shown)]).size.toLocaleString()} 字节`;
+    const selectedNode = findPath(state.shown, state.selected);
+    const navigationPath =
+      selectedNode?.type === 'object' || selectedNode?.type === 'array'
+        ? state.selected
+        : nearestContainerPath(state.shown, state.selected);
+    const columnsHost = $('#path-explorer .path-columns-host');
+    if (columnsHost)
+      columnsHost.innerHTML = renderColumns(
+        state.shown,
+        navigationPath,
+        state.query,
+        state.selected,
+      );
+    graphCleanup?.update?.(state.shown, state.selected, state.query, state.graphDirection);
+    updateCrumbs();
+  } else {
+    render();
+  }
   $('#status').textContent = '路径内容已更新';
 }
 viewer.addEventListener('change', (event) => {
