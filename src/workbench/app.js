@@ -29,6 +29,7 @@ import {
   replacePath,
 } from './data-views.js';
 import { renderDiffByFormat } from './diff-renderer.js';
+import { locateJsonPath, pathAtJsonPosition } from './path-locations.js';
 import {
   autoFormatEditor,
   convertEditorFormat,
@@ -60,6 +61,7 @@ const state = {
   mode: 'graph',
   graphDirection: 'LR',
   graphViewport: null,
+  graphViewportPath: '$',
   lastDataMode: 'graph',
   selected: '$',
   pathPreviewMode: 'selected',
@@ -198,6 +200,7 @@ updateSourceSplitterState();
 
 const sourceHost = $('#source');
 const sourceLanguage = new Compartment();
+let syncingEditorSelection = false;
 const sourceView = new EditorView({
   parent: sourceHost,
   state: EditorState.create({
@@ -208,6 +211,9 @@ const sourceView = new EditorView({
       sourceLanguage.of(json()),
       EditorView.lineWrapping,
       placeholder('在此输入或编辑格式化内容…'),
+      EditorView.updateListener.of((update) => {
+        if (update.selectionSet && !syncingEditorSelection) selectPathFromEditor(sourceView, '$');
+      }),
       EditorView.theme({
         '&': { height: '100%', fontSize: '12px', backgroundColor: '#fff', color: '#344238' },
         '.cm-scroller': { fontFamily: "'DM Mono','Noto Sans SC',monospace", lineHeight: '1.8' },
@@ -248,6 +254,9 @@ const compareView = new EditorView({
       compareLanguage.of(json()),
       EditorView.lineWrapping,
       placeholder('粘贴或导入要比较的数据…'),
+      EditorView.updateListener.of((update) => {
+        if (update.selectionSet && !syncingEditorSelection) selectPathFromEditor(compareView, '$');
+      }),
       EditorView.theme({
         '&': { height: '100%', fontSize: '12px', backgroundColor: '#fff', color: '#344238' },
         '.cm-scroller': { fontFamily: "'DM Mono','Noto Sans SC',monospace", lineHeight: '1.8' },
@@ -294,6 +303,7 @@ function createCodeEditor(
   readOnly = false,
   placeholderText = '',
   onDocumentChange = null,
+  onSelectionChange = null,
 ) {
   const language =
     format === 'yaml' ? yaml() : format === 'json' || format === 'jsonl' ? json() : [];
@@ -312,6 +322,14 @@ function createCodeEditor(
           ? [
               EditorView.updateListener.of((update) => {
                 if (update.docChanged) onDocumentChange(update.state.doc.toString());
+              }),
+            ]
+          : []),
+        ...(onSelectionChange
+          ? [
+              EditorView.updateListener.of((update) => {
+                if (update.selectionSet && !syncingEditorSelection)
+                  onSelectionChange(update.view, update);
               }),
             ]
           : []),
@@ -338,6 +356,7 @@ let resultCodeView = null;
 let pathPreviewView = null;
 let pathPreviewTimer;
 let syncingPathPreview = false;
+let pathPreviewBasePath = '$';
 let originalCodeView = null;
 let graphModulePromise;
 let graphCleanup = null;
@@ -384,6 +403,7 @@ function syncOriginalSourceView(text, format) {
         }
       }, 500);
     },
+    (view) => selectPathFromEditor(view, '$'),
   );
   $('#original-format-label').textContent = text ? `${formatLabel(format)} · 输入格式` : '—';
   $('#original-bytes').textContent = text
@@ -439,6 +459,7 @@ function switchDocument(id) {
   state.root = state.shown = null;
   state.selected = '$';
   state.graphViewport = null;
+  state.graphViewportPath = '$';
   source.value = next.text;
   $('#input-name').textContent = next.name;
   $('#format').value = next.format;
@@ -519,7 +540,8 @@ function renderPathPanel() {
   const previewNode =
     state.pathPreviewMode === 'full' ? state.shown : (selectedNode ?? state.shown);
   const previewText = stringify(previewNode);
-  explorer.innerHTML = `<div class="path-explorer-heading"><strong>路径</strong><code>${escapeHtml(state.selected)}</code><span>直接编辑字段名和值</span></div><div class="path-explorer-body"><div class="path-columns-host">${renderColumns(state.shown, navigationPath, state.query, state.selected)}</div><div class="path-preview-splitter" data-path-preview-splitter role="separator" aria-label="调整路径浏览与 JSON 编辑区宽度" aria-orientation="vertical" tabindex="0"></div><aside class="path-preview-panel" aria-label="JSON 内容编辑"><div class="path-preview-toolbar"><div class="path-preview-tabs" role="tablist" aria-label="预览内容范围"><button type="button" data-preview-mode="selected" class="${state.pathPreviewMode === 'selected' ? 'active' : ''}" aria-pressed="${state.pathPreviewMode === 'selected'}">所选内容</button><button type="button" data-preview-mode="full" class="${state.pathPreviewMode === 'full' ? 'active' : ''}" aria-pressed="${state.pathPreviewMode === 'full'}">完整结果</button></div><span id="path-preview-status">编辑即同步</span><button class="path-preview-copy" type="button" data-path-preview-copy>复制</button></div><div id="path-preview-editor" class="path-preview-editor" aria-label="可编辑 JSON 预览"></div></aside></div>`;
+  pathPreviewBasePath = state.pathPreviewMode === 'full' ? '$' : state.selected;
+  explorer.innerHTML = `<div class="path-explorer-body"><div class="path-columns-host">${renderColumns(state.shown, navigationPath, state.query, state.selected)}</div><div class="path-preview-splitter" data-path-preview-splitter role="separator" aria-label="调整路径浏览与 JSON 编辑区宽度" aria-orientation="vertical" tabindex="0"></div><aside class="path-preview-panel" aria-label="JSON 内容编辑"><div class="path-preview-toolbar"><div class="path-preview-tabs" role="tablist" aria-label="预览内容范围"><button type="button" data-preview-mode="selected" class="${state.pathPreviewMode === 'selected' ? 'active' : ''}" aria-pressed="${state.pathPreviewMode === 'selected'}">所选内容</button><button type="button" data-preview-mode="full" class="${state.pathPreviewMode === 'full' ? 'active' : ''}" aria-pressed="${state.pathPreviewMode === 'full'}">完整结果</button></div><span id="path-preview-status">编辑即同步</span><button class="path-preview-copy" type="button" data-path-preview-copy>复制</button></div><div id="path-preview-editor" class="path-preview-editor" aria-label="可编辑 JSON 预览"></div></aside></div>`;
   explorer.style.setProperty('--path-nav-width', `${state.pathNavRatio}%`);
   pathPreviewView = createCodeEditor(
     $('#path-preview-editor'),
@@ -529,6 +551,9 @@ function renderPathPanel() {
     '编辑 JSON，合法内容会自动同步…',
     (text) => {
       if (!syncingPathPreview) schedulePathPreviewUpdate(text);
+    },
+    (view) => {
+      if (!syncingPathPreview) selectPathFromEditor(view, pathPreviewBasePath);
     },
   );
   requestAnimationFrame(() => {
@@ -555,6 +580,7 @@ function syncPathPreviewSelection() {
   if (!pathPreviewView || state.pathPreviewMode !== 'selected') return;
   const selectedNode = findPath(state.shown, state.selected) ?? state.shown;
   const nextText = stringify(selectedNode);
+  pathPreviewBasePath = state.selected;
   if (pathPreviewView.state.doc.toString() === nextText) return;
   clearTimeout(pathPreviewTimer);
   syncingPathPreview = true;
@@ -625,10 +651,12 @@ function applyPathPreviewUpdate(updated, selectedPath) {
     columnsHost.innerHTML = renderColumns(state.shown, navigationPath, state.query, state.selected);
   graphCleanup?.update?.(state.shown, state.selected, state.query, state.graphDirection);
   updateCrumbs();
+  setSelectedPath(state.selected, { focusGraph: false });
 }
 
 function render() {
   const mode = state.mode;
+  syncViewModeTabs();
   clearTimeout(pathPreviewTimer);
   pathPreviewView?.destroy();
   pathPreviewView = null;
@@ -647,25 +675,14 @@ function render() {
     return;
   }
   const node = state.shown ? (findPath(state.shown, state.selected) ?? state.shown) : null;
-  $('#crumbs').innerHTML = `<span class="crumb-root" data-path="$">$</span>${
-    state.selected === '$'
-      ? ''
-      : state.selected
-          .replace(/^\$\.?/, '')
-          .replace(/\[(\d+)\]/g, '.$1')
-          .split('.')
-          .filter(Boolean)
-          .map(
-            (part) =>
-              `<span class="crumb-sep">›</span><span data-path="${escapeHtml(pathForPart(part))}">${escapeHtml(part)}</span>`,
-          )
-          .join('')
-  }`;
+  updateCrumbs();
   viewer.className = `viewer mode-${mode}`;
   resultCodeView?.destroy();
   resultCodeView = null;
-  if (mode !== 'graph' && graphCleanup)
+  if (mode !== 'graph' && graphCleanup) {
     state.graphViewport = graphCleanup.getViewport?.() ?? state.graphViewport;
+    state.graphViewportPath = state.selected;
+  }
   graphCleanup?.();
   graphCleanup = null;
   if (mode === 'compare') {
@@ -684,6 +701,7 @@ function render() {
       : '等待输入';
     if (comparisonSource.value.trim()) runDiff();
     else syncCompareScroll();
+    setSelectedPath(state.selected, { focusGraph: false });
     return;
   } else if (mode === 'table') {
     viewer.innerHTML = renderTable(state.shown, state.selected, state.query, state.tableSort);
@@ -701,9 +719,7 @@ function render() {
           state.selected,
           state.query,
           (path) => {
-            state.selected = path;
-            updateCrumbs();
-            renderPathPanel();
+            setSelectedPath(path, { focusGraph: false });
           },
           (path, editType, value, valueType) => {
             try {
@@ -735,7 +751,7 @@ function render() {
             }
           },
           state.graphDirection,
-          state.graphViewport,
+          state.graphViewportPath === state.selected ? state.graphViewport : null,
         );
       })
       .catch((error) => {
@@ -751,46 +767,47 @@ function render() {
     );
   } else {
     viewer.innerHTML = renderColumns(state.shown, state.selected, state.query);
-    viewer.querySelectorAll('[data-path]').forEach((el) =>
-      el.addEventListener('click', () => {
-        state.selected = el.dataset.path;
-        render();
-      }),
-    );
+    viewer
+      .querySelectorAll('[data-path]')
+      .forEach((el) => el.addEventListener('click', () => setSelectedPath(el.dataset.path)));
   }
   $('#stats').textContent =
     `${countNodes(state.shown).toLocaleString()} 个节点 · ${new Blob([stringify(state.shown)]).size.toLocaleString()} 字节`;
   $('#input-bytes').textContent = `${new Blob([source.value]).size.toLocaleString()} B`;
   $('#status').textContent = `解析完成 · ${state.expand ? '已展开嵌套 JSON' : '原始结构'}`;
+  setSelectedPath(state.selected, { focusGraph: false });
 }
 function updateCrumbs() {
-  $('#crumbs').innerHTML = `<span class="crumb-root" data-path="$">$</span>${
-    state.selected === '$'
-      ? ''
-      : state.selected
-          .replace(/^\$\.?/, '')
-          .replace(/\[(\d+)\]/g, '.$1')
-          .split('.')
-          .filter(Boolean)
-          .map((part) => `<span class="crumb-sep">›</span><span>${escapeHtml(part)}</span>`)
-          .join('')
-  }`;
-}
-function pathForPart(part) {
+  const crumbs = ['<button class="crumb-root" data-path="$" type="button">$</button>'];
+  const parts = state.selected.slice(1).match(/\[\d+\]|\.[^.[\]]+/g) ?? [];
   let path = '$';
-  const chunks = state.selected
-    .replace(/^\$\.?/, '')
-    .replace(/\[(\d+)\]/g, '.$1')
-    .split('.')
-    .filter(Boolean);
-  for (const chunk of chunks) {
-    path += /^\d+$/.test(chunk) ? `[${chunk}]` : `.${chunk}`;
-    if (chunk === part) break;
+  for (const part of parts) {
+    path += part;
+    const label = part.startsWith('[') ? part.slice(1, -1) : part.slice(1);
+    crumbs.push(
+      `<span class="crumb-sep" aria-hidden="true">›</span><button data-path="${escapeHtml(path)}" type="button">${escapeHtml(label)}</button>`,
+    );
   }
-  return path;
+  $('#crumbs').innerHTML = crumbs.join('');
 }
+function syncViewModeTabs() {
+  const tabs = $('.view-tabs');
+  if (!tabs) return;
+  const activeMode = state.mode === 'compare' ? state.lastDataMode : state.mode;
+  tabs.dataset.activeMode = activeMode;
+  tabs.querySelectorAll('[data-mode]').forEach((button) => {
+    const active = state.mode !== 'compare' && button.dataset.mode === activeMode;
+    button.classList.toggle('active', active);
+    button.setAttribute('aria-selected', String(active));
+  });
+}
+$('#crumbs').addEventListener('click', (event) => {
+  const crumb = event.target.closest('button[data-path]');
+  if (crumb) setSelectedPath(crumb.dataset.path);
+});
 function parseAndRender() {
   const text = source.value;
+  const previousSelection = state.selected;
   syncActiveDocument();
   if (!text.trim()) {
     state.root = state.shown = null;
@@ -808,8 +825,7 @@ function parseAndRender() {
     const root = parseInput(text, state.format);
     state.root = root;
     state.shown = state.expand ? expandNested(root, Number($('#depth').value) || 25) : root;
-    state.selected = '$';
-    state.graphViewport = null;
+    state.selected = findPath(state.shown, previousSelection) ? previousSelection : '$';
     state.query = $('#search').value;
     render();
   } catch (error) {
@@ -909,6 +925,8 @@ function formatComparisonDocument() {
   $('#compare-bytes').textContent = `${new Blob([formatted]).size.toLocaleString()} B`;
 }
 function setInput(text, name = 'untitled.json', format = 'json') {
+  state.selected = '$';
+  state.graphViewport = null;
   const active = state.documents.find((item) => item.id === state.activeDocumentId);
   let compareText = comparisonSource.value;
   let compareError = '';
@@ -1011,15 +1029,13 @@ $('#search').addEventListener('input', (event) => {
 });
 document.querySelectorAll('.view-tabs button').forEach((button) =>
   button.addEventListener('click', () => {
-    document
-      .querySelectorAll('.view-tabs button')
-      .forEach((item) => item.classList.toggle('active', item === button));
     $('#compare-toggle').classList.remove('active');
     $('#compare-toggle').setAttribute('aria-pressed', 'false');
     $('#view-toggle').classList.add('active');
     $('#view-toggle').setAttribute('aria-pressed', 'true');
     state.mode = button.dataset.mode;
     state.lastDataMode = state.mode;
+    syncViewModeTabs();
     render();
   }),
 );
@@ -1104,7 +1120,6 @@ $('#compare-toggle').addEventListener('click', () => {
   $('#compare-toggle').setAttribute('aria-pressed', 'true');
   $('#view-toggle').classList.remove('active');
   $('#view-toggle').setAttribute('aria-pressed', 'false');
-  document.querySelectorAll('.view-tabs button').forEach((item) => item.classList.remove('active'));
   render();
 });
 $('#view-toggle').addEventListener('click', () => {
@@ -1114,9 +1129,6 @@ $('#view-toggle').addEventListener('click', () => {
   $('#compare-toggle').setAttribute('aria-pressed', 'false');
   $('#view-toggle').classList.add('active');
   $('#view-toggle').setAttribute('aria-pressed', 'true');
-  document
-    .querySelectorAll('.view-tabs button')
-    .forEach((item) => item.classList.toggle('active', item.dataset.mode === state.mode));
   render();
 });
 $('#import-compare').addEventListener('click', () => $('#compare-file-input').click());
@@ -1277,29 +1289,148 @@ function scheduleDiff() {
   clearTimeout(diffTimer);
   diffTimer = setTimeout(runDiff, 160);
 }
-function selectTextPath(editor, path) {
-  const match = path.match(/(?:^|\.)([^.[\]]+)$|\[(\d+)\]$/);
-  const key = match?.[1];
-  if (!key) return;
-  const quoted = JSON.stringify(key);
-  const doc = editor.state.doc;
-  for (let number = 1; number <= doc.lines; number += 1) {
-    const line = doc.line(number);
-    const local = line.text.indexOf(quoted);
-    if (
-      local >= 0 &&
-      line.text
-        .slice(local + quoted.length)
-        .trimStart()
-        .startsWith(':')
-    ) {
-      editor.dispatch({
-        selection: { anchor: line.from + local, head: line.to },
-        scrollIntoView: true,
-      });
-      editor.focus();
-      return;
+function textPathLocation(editor, path) {
+  const text = editor.state.doc.toString();
+  const exact = locateJsonPath(text, path);
+  if (exact) return exact;
+  const part = path.match(/(?:^|\.)([^.[\]]+)$|\[(\d+)\]$/);
+  const key = part?.[1] ?? part?.[2];
+  if (key === undefined) return null;
+  const escaped = key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const pattern = new RegExp(`^\\s*(?:"${escaped}"|'${escaped}'|${escaped})\\s*[:=]`);
+  for (let number = 1; number <= editor.state.doc.lines; number += 1) {
+    const line = editor.state.doc.line(number);
+    if (pattern.test(line.text)) return { path, from: line.from, to: line.to };
+  }
+  return null;
+}
+
+function selectTextPath(editor, path, basePath = '$') {
+  if (!editor) return;
+  let localPath = path;
+  if (basePath !== '$') {
+    if (path === basePath) localPath = '$';
+    else if (path.startsWith(`${basePath}.`) || path.startsWith(`${basePath}[`))
+      localPath = `$${path.slice(basePath.length)}`;
+  }
+  const location = textPathLocation(editor, localPath);
+  if (!location) return;
+  editor.dispatch({
+    selection: { anchor: location.from, head: location.to },
+    scrollIntoView: true,
+  });
+}
+
+function selectPathFromEditor(editor, basePath = '$') {
+  if (!state.shown) return;
+  const position = editor.state.selection.main.head;
+  const text = editor.state.doc.toString();
+  let localPath = pathAtJsonPosition(text, position);
+  if (!text.trimStart().startsWith('{') && !text.trimStart().startsWith('[')) {
+    const line = editor.state.doc.lineAt(position).text;
+    const match = line.match(/^\s*(?:-\s*)?(?:"([^"]+)"|'([^']+)'|([\w-]+))\s*[:=]/);
+    const key = match?.[1] ?? match?.[2] ?? match?.[3];
+    if (key) {
+      const candidates = [];
+      const visit = (node, path = '$') => {
+        const entries =
+          node.type === 'object'
+            ? node.entries.map(({ key: childKey, value }) => [childKey, value])
+            : node.type === 'array'
+              ? node.items.map((value, index) => [String(index), value])
+              : [];
+        for (const [childKey, child] of entries) {
+          const childPath = node.type === 'array' ? `${path}[${childKey}]` : `${path}.${childKey}`;
+          if (String(childKey) === key) candidates.push(childPath);
+          visit(child, childPath);
+        }
+      };
+      visit(state.shown);
+      const commonPrefixLength = (candidate) => {
+        let index = 0;
+        while (candidate[index] === state.selected[index] && index < candidate.length) index += 1;
+        return index;
+      };
+      candidates.sort((left, right) => commonPrefixLength(right) - commonPrefixLength(left));
+      localPath = candidates[0] ?? localPath;
     }
+  }
+  if (!localPath) return;
+  const path =
+    basePath === '$' || localPath === '$' ? basePath : `${basePath}${localPath.slice(1)}`;
+  if (findPath(state.shown, path)) setSelectedPath(path, { originEditor: editor });
+}
+
+function focusPathColumn() {
+  const explorer = $('#path-explorer');
+  const columnsView = explorer?.querySelector('.columns-view');
+  if (!columnsView) return;
+  const row = [...explorer.querySelectorAll('.path-item[data-selected-path]')].find(
+    (item) => item.dataset.selectedPath === state.selected,
+  );
+  const column = row?.closest('.path-column');
+  if (!row || !column) return;
+  columnsView.scrollTo({
+    left: Math.max(0, column.offsetLeft - (columnsView.clientWidth - column.offsetWidth) / 2),
+    behavior: 'auto',
+  });
+  column.scrollTop = Math.max(0, row.offsetTop - (column.clientHeight - row.offsetHeight) / 2);
+}
+
+function refreshPathColumns() {
+  const selectedNode = findPath(state.shown, state.selected);
+  const navigationPath =
+    selectedNode?.type === 'object' || selectedNode?.type === 'array'
+      ? state.selected
+      : nearestContainerPath(state.shown, state.selected);
+  const host = $('#path-explorer .path-columns-host');
+  if (!host) return;
+  host.innerHTML = renderColumns(state.shown, navigationPath, state.query, state.selected);
+  requestAnimationFrame(focusPathColumn);
+}
+
+function setSelectedPath(path, { originEditor = null, focusGraph = true } = {}) {
+  if (!state.shown || !findPath(state.shown, path)) return;
+  state.selected = path;
+  updateCrumbs();
+  const heading = $('#path-explorer .path-explorer-heading code');
+  if (heading) heading.textContent = path;
+  viewer
+    .querySelectorAll(
+      '.path-item.selected, .json-tree-row.selected, .data-table tr.selected, .merged-line.selected',
+    )
+    .forEach((item) => item.classList.remove('selected'));
+  [...viewer.querySelectorAll('.path-item[data-selected-path]')]
+    .find((item) => item.dataset.selectedPath === path)
+    ?.classList.add('selected');
+  [
+    ...viewer.querySelectorAll(
+      '.json-tree-row[data-path], .data-table tbody tr[data-path], .merged-line[data-path]',
+    ),
+  ]
+    .filter((item) => item.dataset.path === path)
+    .forEach((item) => item.classList.add('selected'));
+  const selectedRow = viewer.querySelector(
+    `.json-tree-row.selected, .data-table tr.selected, .merged-line.selected`,
+  );
+  selectedRow?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+  if (state.mode === 'graph') refreshPathColumns();
+  if (state.mode === 'graph' && focusGraph)
+    graphCleanup?.select?.(nearestContainerPath(state.shown, path));
+  syncPathPreviewSelection();
+
+  syncingEditorSelection = true;
+  try {
+    for (const editor of [sourceView, originalCodeView, compareView, pathPreviewView]) {
+      if (!editor || editor === originEditor) continue;
+      const basePath =
+        editor === pathPreviewView && state.pathPreviewMode === 'selected'
+          ? pathPreviewBasePath
+          : '$';
+      selectTextPath(editor, path, basePath);
+    }
+  } finally {
+    syncingEditorSelection = false;
   }
 }
 compareView.dom.addEventListener('input', () => {
@@ -1332,31 +1463,6 @@ compareView.dom.addEventListener('input', () => {
   $('#compare-bytes').textContent = `${new Blob([comparisonSource.value]).size.toLocaleString()} B`;
   scheduleDiff();
 });
-function selectEditorPath(path) {
-  const match = path.match(/(?:^|\.)([^.[\]]+)$|\[(\d+)\]$/);
-  const key = match?.[1];
-  if (!key) return;
-  const quoted = JSON.stringify(key);
-  const doc = sourceView.state.doc;
-  for (let number = 1; number <= doc.lines; number += 1) {
-    const line = doc.line(number);
-    const local = line.text.indexOf(quoted);
-    if (
-      local >= 0 &&
-      line.text
-        .slice(local + quoted.length)
-        .trimStart()
-        .startsWith(':')
-    ) {
-      sourceView.dispatch({
-        selection: { anchor: line.from + local, head: line.to },
-        scrollIntoView: true,
-      });
-      sourceView.focus();
-      return;
-    }
-  }
-}
 viewer.addEventListener('click', (event) => {
   if (event.target.closest('[data-path-preview-copy]')) {
     const button = event.target.closest('[data-path-preview-copy]');
@@ -1404,55 +1510,28 @@ viewer.addEventListener('click', (event) => {
   }
   const editorInput = event.target.closest('.path-key-input, .path-value-input');
   if (editorInput) {
-    state.selected = editorInput.dataset.path;
-    updateCrumbs();
-    const pathLabel = $('#path-explorer .path-explorer-heading code');
-    if (pathLabel) pathLabel.textContent = state.selected;
-    viewer
-      .querySelectorAll('.path-item.selected')
-      .forEach((item) => item.classList.remove('selected'));
-    editorInput.closest('.path-item')?.classList.add('selected');
-    syncPathPreviewSelection();
-    graphCleanup?.select?.(nearestContainerPath(state.shown, state.selected));
+    setSelectedPath(editorInput.dataset.path);
     return;
   }
   const treeRow = event.target.closest('.json-tree-row[data-path]');
   if (treeRow) {
-    state.selected = treeRow.dataset.path;
-    updateCrumbs();
-    viewer
-      .querySelectorAll('.json-tree-row.selected')
-      .forEach((row) => row.classList.remove('selected'));
-    treeRow.classList.add('selected');
+    setSelectedPath(treeRow.dataset.path, { focusGraph: false });
     return;
   }
   const tableRow = event.target.closest('.data-table tbody tr[data-path]');
   if (tableRow) {
-    state.selected = tableRow.dataset.path;
-    updateCrumbs();
-    viewer
-      .querySelectorAll('.data-table tbody tr.selected')
-      .forEach((row) => row.classList.remove('selected'));
-    tableRow.classList.add('selected');
+    setSelectedPath(tableRow.dataset.path, { focusGraph: false });
     return;
   }
   const drill = event.target.closest('.path-drill[data-path]');
   if (drill) {
-    state.selected = drill.dataset.path;
-    updateCrumbs();
-    renderPathPanel();
-    graphCleanup?.select?.(nearestContainerPath(state.shown, state.selected));
+    setSelectedPath(drill.dataset.path);
     return;
   }
   const row = event.target.closest('.merged-line[data-path]');
   if (!row) return;
   const path = row.dataset.path;
-  selectEditorPath(path);
-  selectTextPath(compareView, path);
-  viewer
-    .querySelectorAll('.merged-line.selected')
-    .forEach((item) => item.classList.remove('selected'));
-  row.classList.add('selected');
+  setSelectedPath(path, { focusGraph: false });
 });
 viewer.addEventListener('pointerdown', (event) => {
   const splitter = event.target.closest('[data-path-preview-splitter]');
@@ -1521,6 +1600,7 @@ function commitPathUpdate(updated, selectedPath = state.selected) {
   } else {
     render();
   }
+  setSelectedPath(state.selected, { focusGraph: false });
   $('#status').textContent = '路径内容已更新';
 }
 viewer.addEventListener('change', (event) => {
