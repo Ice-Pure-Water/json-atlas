@@ -520,10 +520,6 @@ function FlowCanvas({ graph, onSelect, onEdit, registerSelect }) {
   const onInit = (instance) =>
     requestAnimationFrame(() =>
       instance.fitView({
-        nodes: [
-          { id: '$' },
-          ...graph.edges.filter((edge) => edge.source === '$').map((edge) => ({ id: edge.target })),
-        ],
         padding: 0.12,
         maxZoom: 1,
         duration: 180,

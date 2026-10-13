@@ -10,7 +10,6 @@ import {
 import { stringify as stringifyToml } from 'smol-toml';
 import YAML from 'yaml';
 import Papa from 'papaparse';
-import * as LosslessJSON from 'lossless-json';
 import { basicSetup } from 'codemirror';
 import { json } from '@codemirror/lang-json';
 import { yaml } from '@codemirror/lang-yaml';
@@ -24,9 +23,10 @@ import {
   findPath,
   nearestContainerPath,
   renderColumns,
+  renderTable,
+  renderTree,
   renamePathKey,
   replacePath,
-  toTableRows,
 } from './data-views.js';
 import { renderDiffByFormat } from './diff-renderer.js';
 import {
@@ -61,6 +61,9 @@ const state = {
   graphDirection: 'LR',
   lastDataMode: 'graph',
   selected: '$',
+  treeCollapsed: new Set(),
+  treeExpanded: new Set(),
+  tableSort: { key: 'path', direction: 'asc' },
   originalSourceOpen: true,
   query: '',
   expand: true,
@@ -88,6 +91,50 @@ const state = {
 mountWorkspaceShell($('#app'));
 mountThemeControls({
   buttons: [...document.querySelectorAll('.theme-switcher [data-theme-choice]')],
+});
+const mainSplitter = $('#main-splitter');
+const editorWorkspace = $('.workspace');
+let mainSplitterDragging = false;
+mainSplitter.addEventListener('pointerdown', (event) => {
+  mainSplitterDragging = true;
+  mainSplitter.classList.add('dragging');
+  mainSplitter.setPointerCapture(event.pointerId);
+  event.preventDefault();
+});
+mainSplitter.addEventListener('pointermove', (event) => {
+  if (!mainSplitterDragging || editorWorkspace.classList.contains('compare-mode')) return;
+  const bounds = editorWorkspace.getBoundingClientRect();
+  if (window.matchMedia('(max-width: 760px)').matches) {
+    const ratio = Math.max(0.25, Math.min(0.72, (event.clientY - bounds.top) / bounds.height));
+    editorWorkspace.style.setProperty('--pane-top', `${ratio * 100}%`);
+  } else {
+    const ratio = Math.max(0.25, Math.min(0.68, (event.clientX - bounds.left) / bounds.width));
+    editorWorkspace.style.setProperty('--pane-left', `${ratio * 100}%`);
+  }
+});
+mainSplitter.addEventListener('pointerup', () => {
+  mainSplitterDragging = false;
+  mainSplitter.classList.remove('dragging');
+});
+mainSplitter.addEventListener('pointercancel', () => {
+  mainSplitterDragging = false;
+  mainSplitter.classList.remove('dragging');
+});
+mainSplitter.addEventListener('keydown', (event) => {
+  const mobile = window.matchMedia('(max-width: 760px)').matches;
+  const property = mobile ? '--pane-top' : '--pane-left';
+  const current =
+    parseFloat(getComputedStyle(editorWorkspace).getPropertyValue(property)) || (mobile ? 52 : 36);
+  if ((!mobile && event.key === 'ArrowLeft') || (mobile && event.key === 'ArrowUp'))
+    editorWorkspace.style.setProperty(property, `${Math.max(25, current - 2)}%`);
+  else if ((!mobile && event.key === 'ArrowRight') || (mobile && event.key === 'ArrowDown'))
+    editorWorkspace.style.setProperty(property, `${Math.min(mobile ? 72 : 68, current + 2)}%`);
+  else return;
+  event.preventDefault();
+});
+$('#fullscreen-toggle').addEventListener('click', async () => {
+  if (!document.fullscreenElement) await document.documentElement.requestFullscreen?.();
+  else await document.exitFullscreen?.();
 });
 const sourceStack = $('.source-stack');
 const sourceSplitter = $('#source-stack-splitter');
@@ -284,14 +331,10 @@ function createCodeEditor(
 const viewer = $('#viewer');
 const workspace = $('.workspace');
 const compareInputPanel = $('#compare-input-panel');
-let jsonEditor = null;
 let resultCodeView = null;
 let originalCodeView = null;
-let dataTable = null;
-let tableModulePromise;
 let graphModulePromise;
 let graphCleanup = null;
-let editorModulePromise;
 const formatLabel = (format) =>
   ({ jsonl: 'JSONL', ndjson: 'NDJSON', yaml: 'YAML', toml: 'TOML', csv: 'CSV', log: 'LOG' })[
     format
@@ -362,12 +405,8 @@ function syncActiveDocument() {
   renderDocumentTabs();
 }
 function resetResultView() {
-  jsonEditor?.destroy();
-  jsonEditor = null;
   resultCodeView?.destroy();
   resultCodeView = null;
-  dataTable?.destroy();
-  dataTable = null;
   graphCleanup?.();
   graphCleanup = null;
   viewer.innerHTML =
@@ -452,10 +491,6 @@ $('#document-tabs').addEventListener('click', (event) => {
 });
 $('#add-tab').addEventListener('click', addDocument);
 renderDocumentTabs();
-const losslessParser = {
-  parse: (text) => LosslessJSON.parse(text),
-  stringify: (value, replacer, space) => LosslessJSON.stringify(value, replacer, space),
-};
 function escapeHtml(value) {
   return String(value).replace(
     /[&<>"']/g,
@@ -478,12 +513,8 @@ function render() {
   workspace.classList.toggle('compare-mode', mode === 'compare');
   compareInputPanel.classList.toggle('hidden', mode !== 'compare');
   if (!state.shown && mode !== 'compare') {
-    jsonEditor?.destroy();
-    jsonEditor = null;
     resultCodeView?.destroy();
     resultCodeView = null;
-    dataTable?.destroy();
-    dataTable = null;
     graphCleanup?.();
     graphCleanup = null;
     viewer.className = `viewer mode-${mode}`;
@@ -509,12 +540,8 @@ function render() {
           .join('')
   }`;
   viewer.className = `viewer mode-${mode}`;
-  jsonEditor?.destroy();
-  jsonEditor = null;
   resultCodeView?.destroy();
   resultCodeView = null;
-  dataTable?.destroy();
-  dataTable = null;
   graphCleanup?.();
   graphCleanup = null;
   if (mode === 'compare') {
@@ -535,38 +562,7 @@ function render() {
     else syncCompareScroll();
     return;
   } else if (mode === 'table') {
-    viewer.innerHTML = '<div class="table-view-host"></div>';
-    const host = viewer.firstElementChild;
-    tableModulePromise ??= Promise.all([
-      import('tabulator-tables'),
-      import('tabulator-tables/dist/css/tabulator.min.css'),
-    ]);
-    tableModulePromise
-      .then(([{ TabulatorFull }]) => {
-        if (!host.isConnected || state.mode !== 'table' || !state.shown) return;
-        dataTable = new TabulatorFull(host, {
-          data: [toTableRows(state.shown, '$', '$', state.query)].filter(Boolean),
-          dataTree: true,
-          dataTreeStartExpanded: true,
-          dataTreeChildField: '_children',
-          layout: 'fitColumns',
-          height: '100%',
-          placeholder: '没有匹配的字段',
-          columns: [
-            { title: '路径', field: 'path', minWidth: 180, widthGrow: 2 },
-            { title: '字段', field: 'field', minWidth: 110 },
-            { title: '类型', field: 'kind', width: 88 },
-            { title: '值 / 子项', field: 'value', minWidth: 160, widthGrow: 2 },
-          ],
-          rowClick: (_event, row) => {
-            state.selected = row.getData().path;
-            updateCrumbs();
-          },
-        });
-      })
-      .catch((error) => {
-        if (host.isConnected) host.textContent = `表格视图加载失败：${error.message}`;
-      });
+    viewer.innerHTML = renderTable(state.shown, state.selected, state.query, state.tableSort);
   } else if (mode === 'graph') {
     viewer.innerHTML = `<div class="graph-path-workspace"><section class="graph-panel"><div class="graph-panel-toolbar"><strong>关系图</strong><button id="graph-direction-toggle" class="graph-direction-toggle" type="button" title="切换布局方向">${state.graphDirection === 'LR' ? '↕ 纵向' : '↔ 横向'}</button></div><div class="graph-view-host"></div></section><section id="path-explorer" class="path-explorer" aria-label="路径导航与编辑"></section></div>`;
     const host = viewer.querySelector('.graph-view-host');
@@ -621,58 +617,13 @@ function render() {
         if (host.isConnected) host.textContent = `关系图加载失败：${error.message}`;
       });
   } else if (mode === 'tree') {
-    viewer.innerHTML = '<div class="json-editor-host"></div>';
-    const host = viewer.firstElementChild;
-    editorModulePromise ??= import('vanilla-jsoneditor');
-    editorModulePromise.then(({ createJSONEditor, stringifyJSONPath }) => {
-      if (!host.isConnected) return;
-      jsonEditor = createJSONEditor({
-        target: host,
-        props: {
-          content: { text: stringify(state.shown, 2) },
-          mode,
-          parser: losslessParser,
-          mainMenuBar: false,
-          navigationBar: false,
-          statusBar: false,
-          onSelect: (selection) => {
-            if (selection?.path) {
-              state.selected = stringifyJSONPath(selection.path);
-              updateCrumbs();
-            }
-          },
-          onChange: (content) => {
-            try {
-              const jsonText = content.text ?? losslessParser.stringify(content.json, null, 2);
-              const editedNode = parseInput(jsonText, 'json');
-              const text = serializeNode(editedNode, state.format);
-              source.value = text;
-              const active = state.documents.find((item) => item.id === state.activeDocumentId);
-              if (active) {
-                active.originalText = text;
-                active.originalFormat = state.format;
-              }
-              syncOriginalSourceView(text, state.format);
-              updateInputExtension(state.format);
-              $('#input-format-label').textContent = formatLabel(state.format);
-              state.root = parseInput(text, state.format);
-              state.shown = state.expand
-                ? expandNested(state.root, Number($('#depth').value) || 25)
-                : state.root;
-              $('#status').textContent = '编辑已同步';
-              $('#stats').textContent =
-                `${countNodes(state.shown).toLocaleString()} 个节点 · ${new Blob([stringify(state.shown)]).size.toLocaleString()} 字节`;
-              $('#input-bytes').textContent = `${new Blob([text]).size.toLocaleString()} B`;
-              syncActiveDocument();
-            } catch (error) {
-              state.root = state.shown = null;
-              $('#status').textContent = '源码编辑中…';
-              $('#stats').textContent = '—';
-            }
-          },
-        },
-      });
-    });
+    viewer.innerHTML = renderTree(
+      state.shown,
+      state.selected,
+      state.query,
+      state.treeCollapsed,
+      state.treeExpanded,
+    );
   } else {
     viewer.innerHTML = renderColumns(state.shown, state.selected, state.query);
     viewer.querySelectorAll('[data-path]').forEach((el) =>
@@ -737,12 +688,8 @@ function parseAndRender() {
   } catch (error) {
     state.root = state.shown = null;
     $('#status').textContent = '解析失败';
-    jsonEditor?.destroy();
-    jsonEditor = null;
     resultCodeView?.destroy();
     resultCodeView = null;
-    dataTable?.destroy();
-    dataTable = null;
     graphCleanup?.();
     graphCleanup = null;
     viewer.className = 'viewer error-view';
@@ -933,7 +880,7 @@ $('#expand-toggle').addEventListener('change', (event) => {
 $('#depth').addEventListener('change', parseAndRender);
 $('#search').addEventListener('input', (event) => {
   state.query = event.target.value;
-  if (['graph', 'table'].includes(state.mode)) render();
+  if (['graph', 'tree', 'table'].includes(state.mode)) render();
 });
 document.querySelectorAll('.view-tabs button').forEach((button) =>
   button.addEventListener('click', () => {
@@ -941,21 +888,14 @@ document.querySelectorAll('.view-tabs button').forEach((button) =>
       .querySelectorAll('.view-tabs button')
       .forEach((item) => item.classList.toggle('active', item === button));
     $('#compare-toggle').classList.remove('active');
-    $('#editor-view-toggle').classList.add('active');
+    $('#compare-toggle').setAttribute('aria-pressed', 'false');
+    $('#view-toggle').classList.add('active');
+    $('#view-toggle').setAttribute('aria-pressed', 'true');
     state.mode = button.dataset.mode;
     state.lastDataMode = state.mode;
     render();
   }),
 );
-$('#editor-view-toggle').addEventListener('click', () => {
-  state.mode = state.lastDataMode || 'graph';
-  $('#compare-toggle').classList.remove('active');
-  $('#editor-view-toggle').classList.add('active');
-  document
-    .querySelectorAll('.view-tabs button')
-    .forEach((item) => item.classList.toggle('active', item.dataset.mode === state.mode));
-  render();
-});
 function clearDocument() {
   source.value = '';
   clearTimeout(originalTextTimer);
@@ -1012,7 +952,8 @@ $('#download-output').addEventListener(
   () => state.shown && download('expanded.json', stringify(state.shown)),
 );
 $('#compare-toggle').addEventListener('click', () => {
-  if (state.mode !== 'compare') state.lastDataMode = state.mode;
+  if (state.mode === 'compare') return;
+  state.lastDataMode = state.mode;
   const active = state.documents.find((item) => item.id === state.activeDocumentId);
   if (active && !active.compareInitialized) {
     active.compareText = source.value;
@@ -1033,8 +974,22 @@ $('#compare-toggle').addEventListener('click', () => {
   }
   state.mode = 'compare';
   $('#compare-toggle').classList.add('active');
-  $('#editor-view-toggle').classList.remove('active');
+  $('#compare-toggle').setAttribute('aria-pressed', 'true');
+  $('#view-toggle').classList.remove('active');
+  $('#view-toggle').setAttribute('aria-pressed', 'false');
   document.querySelectorAll('.view-tabs button').forEach((item) => item.classList.remove('active'));
+  render();
+});
+$('#view-toggle').addEventListener('click', () => {
+  if (state.mode !== 'compare') return;
+  state.mode = state.lastDataMode || 'graph';
+  $('#compare-toggle').classList.remove('active');
+  $('#compare-toggle').setAttribute('aria-pressed', 'false');
+  $('#view-toggle').classList.add('active');
+  $('#view-toggle').setAttribute('aria-pressed', 'true');
+  document
+    .querySelectorAll('.view-tabs button')
+    .forEach((item) => item.classList.toggle('active', item.dataset.mode === state.mode));
   render();
 });
 $('#import-compare').addEventListener('click', () => $('#compare-file-input').click());
@@ -1281,6 +1236,30 @@ viewer.addEventListener('click', (event) => {
     render();
     return;
   }
+  const treeToggle = event.target.closest('[data-tree-toggle]');
+  if (treeToggle) {
+    const path = treeToggle.dataset.treeToggle;
+    if (treeToggle.dataset.collapsed === 'true') {
+      state.treeCollapsed.delete(path);
+      state.treeExpanded.add(path);
+    } else {
+      state.treeExpanded.delete(path);
+      state.treeCollapsed.add(path);
+    }
+    render();
+    return;
+  }
+  const sortButton = event.target.closest('[data-table-sort]');
+  if (sortButton) {
+    const key = sortButton.dataset.tableSort;
+    state.tableSort = {
+      key,
+      direction:
+        state.tableSort.key === key && state.tableSort.direction === 'asc' ? 'desc' : 'asc',
+    };
+    render();
+    return;
+  }
   const editorInput = event.target.closest('.path-key-input, .path-value-input');
   if (editorInput) {
     state.selected = editorInput.dataset.path;
@@ -1292,6 +1271,26 @@ viewer.addEventListener('click', (event) => {
       .forEach((item) => item.classList.remove('selected'));
     editorInput.closest('.path-item')?.classList.add('selected');
     graphCleanup?.select?.(nearestContainerPath(state.shown, state.selected));
+    return;
+  }
+  const treeRow = event.target.closest('.json-tree-row[data-path]');
+  if (treeRow) {
+    state.selected = treeRow.dataset.path;
+    updateCrumbs();
+    viewer
+      .querySelectorAll('.json-tree-row.selected')
+      .forEach((row) => row.classList.remove('selected'));
+    treeRow.classList.add('selected');
+    return;
+  }
+  const tableRow = event.target.closest('.data-table tbody tr[data-path]');
+  if (tableRow) {
+    state.selected = tableRow.dataset.path;
+    updateCrumbs();
+    viewer
+      .querySelectorAll('.data-table tbody tr.selected')
+      .forEach((row) => row.classList.remove('selected'));
+    tableRow.classList.add('selected');
     return;
   }
   const drill = event.target.closest('.path-drill[data-path]');
@@ -1372,7 +1371,8 @@ viewer.addEventListener('change', (event) => {
     commitPathUpdate(updated, selectedPath);
   } catch (error) {
     $('#status').textContent = `修改失败：${error.message}`;
-    renderPathPanel();
+    if (state.mode === 'graph') renderPathPanel();
+    else render();
   }
 });
 viewer.addEventListener('keydown', (event) => {

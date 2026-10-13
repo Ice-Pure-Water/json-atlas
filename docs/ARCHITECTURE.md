@@ -25,14 +25,13 @@ Number nodes keep JSON number text in `raw`. This avoids converting a large JSON
 
 `src/main.js` is a thin browser entry point. It loads `src/workbench/app.js`, which owns the active document, source snapshots, selected format, active view, search, comparison text, and in-memory document tabs. The shell markup lives in `src/workbench/shell.js`; the app controller composes focused modules for formatting and conversion (`formatting.js`), structural views (`data-views.js`), comparison rendering (`diff-renderer.js`), and graph interaction (`src/graph.js`).
 
-The result renderer replaces the view component when the selected mode changes:
+The result renderer replaces the view component when the selected mode changes. The workbench shell is a compact command bar above resizable editor and result panes; compare mode temporarily lays those panes out as three columns. The compare button also returns to the last data view, so there is no separate hidden navigation action.
 
-- `graph`: `src/graph.js` builds graph nodes from the tagged tree and renders them through React Flow. Primitive values and object keys can be edited in place; container summaries navigate down, and a nested card header navigates to its parent. Layout order follows source order.
-- `tree`: `vanilla-jsoneditor` displays and edits the tree. Changes flow back to the working source.
+- `graph`: `src/graph.js` builds graph nodes from the tagged tree and renders them through React Flow. Primitive values and object keys can be edited in place; container summaries navigate down, and a nested card header navigates to its parent. Layout order follows source order. Editable path columns render below the graph; selection and edits stay synchronized with both source editors.
+- `tree`: the nested JSON editor displays and edits the tree. Changes flow back to the working source.
 - `table`: Tabulator displays a recursive data tree.
-- `graph`: React Flow and editable path columns render together. Selection stays synchronized; graph and path edits update the tagged tree, formatted source, and original input editor.
-- `editor`: CodeMirror displays the editable formatted copy above the collapsible, editable original-input editor. Valid original input changes are parsed and formatted automatically. Graph and path edits update both source editors.
-- `compare`: two CodeMirror editors feed a structural diff. The right pane renders the merged data and scrolls in sync with both editors.
+- The source pane contains two vertically resizable CodeMirror editors: editable original input above, editable formatted content below. Valid original-input changes are parsed and formatted automatically. Graph, path, and tree edits update both source editors.
+- `compare`: the active document, an editable comparison document, and a merged structural-difference result are shown in three panes. Scroll positions stay synchronized. The comparison document uses the active document's format; per-document import/export stays with its editor.
 
 Input parsing and conversion are kept separate from view code in `src/core.js`. `src/landing.js` is likewise a small entry point: it mounts the product page from `src/landing/shell.js` and attaches the same theme controller used by the workbench. Browser-only libraries are loaded by the workbench controller.
 

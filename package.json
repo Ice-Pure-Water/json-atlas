@@ -37,8 +37,6 @@
     "react": "^19.3.0",
     "react-dom": "^19.3.0",
     "smol-toml": "^1.9.1",
-    "tabulator-tables": "^6.6.1",
-    "vanilla-jsoneditor": "^3.13.0",
     "yaml": "^2.8.1"
   },
   "devDependencies": {

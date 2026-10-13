@@ -181,19 +181,128 @@ export function renderColumns(root, path = '$', query = '') {
   return `<div class="columns-view">${columns.join('')}</div>`;
 }
 
-export function toTableRows(node, path = '$', label = '$', query = '') {
+function treeValueControl(node, path) {
+  if (node.type === 'boolean') {
+    return `<select class="path-value-input tree-value-input" data-path="${escapeHtml(path)}" data-value-type="boolean" aria-label="值" title="布尔值"><option value="true" ${node.value ? 'selected' : ''}>true</option><option value="false" ${node.value ? '' : 'selected'}>false</option></select>`;
+  }
+  const value = node.type === 'number' ? node.raw : node.type === 'null' ? 'null' : node.value;
+  return `<input class="path-value-input tree-value-input" data-path="${escapeHtml(path)}" data-value-type="${node.type}" value="${escapeHtml(value)}" aria-label="值" spellcheck="false"/>`;
+}
+
+function treeNode(node, path, label, depth, selectedPath, query, collapsedPaths, expandedPaths) {
+  const entries = children(node);
+  const hasChildren = entries.length > 0;
+  const ownMatch =
+    !query ||
+    `${label} ${path} ${typeName(node)} ${valueText(node)}`
+      .toLowerCase()
+      .includes(query.toLowerCase());
+  const visibleEntries = query
+    ? entries.filter(([key, child]) => {
+        const childPath = node.type === 'array' ? `${path}[${key}]` : `${path}.${key}`;
+        return matchesQuery(child, childPath, key, query);
+      })
+    : entries;
+  const defaultCollapsed = depth >= 3;
+  const collapsed =
+    hasChildren &&
+    !query &&
+    (collapsedPaths.has(path) || (!expandedPaths.has(path) && defaultCollapsed));
+  if (!ownMatch && !visibleEntries.length) return '';
+  const type = node.type === 'object' ? '对象' : node.type === 'array' ? '数组' : typeName(node);
+  const field =
+    path === '$'
+      ? '<span class="tree-root-label">$</span>'
+      : node.type === 'array'
+        ? `<span class="tree-array-index">${escapeHtml(label)}</span>`
+        : `<input class="path-key-input tree-key-input" data-path="${escapeHtml(path)}" data-original-key="${escapeHtml(label)}" value="${escapeHtml(label)}" aria-label="字段名" spellcheck="false"/>`;
+  const value = hasChildren
+    ? `<span class="tree-children-count">${node.type === 'array' ? '[' : '{'}${entries.length}${node.type === 'array' ? ']' : '}'}</span>`
+    : treeValueControl(node, path);
+  const toggle = hasChildren
+    ? `<button class="tree-disclosure" type="button" data-tree-toggle="${escapeHtml(path)}" data-collapsed="${collapsed}" aria-label="${collapsed ? '展开' : '折叠'} ${escapeHtml(label)}" aria-expanded="${!collapsed}">${collapsed ? '›' : '⌄'}</button>`
+    : '<span class="tree-disclosure-spacer"></span>';
+  const row = `<div class="json-tree-row ${path === selectedPath ? 'selected' : ''} ${path === '$' ? 'root-row' : ''}" role="treeitem" data-path="${escapeHtml(path)}" aria-expanded="${hasChildren ? !collapsed : 'false'}" style="--tree-depth:${depth}">${toggle}<div class="json-tree-field">${field}</div><span class="json-tree-type type-${node.type}">${type}</span><div class="json-tree-value">${value}</div></div>`;
+  const childrenHtml =
+    hasChildren && !collapsed
+      ? `<div class="json-tree-children" role="group">${visibleEntries
+          .map(([key, child]) => {
+            const childPath = node.type === 'array' ? `${path}[${key}]` : `${path}.${key}`;
+            return treeNode(
+              child,
+              childPath,
+              key,
+              depth + 1,
+              selectedPath,
+              query,
+              collapsedPaths,
+              expandedPaths,
+            );
+          })
+          .join('')}</div>`
+      : '';
+  return `<div class="json-tree-branch">${row}${childrenHtml}</div>`;
+}
+
+export function renderTree(
+  root,
+  selectedPath = '$',
+  query = '',
+  collapsedPaths = new Set(),
+  expandedPaths = new Set(),
+) {
+  return `<div class="json-tree" role="tree" aria-label="JSON 树形视图">${treeNode(root, '$', '$', 0, selectedPath, query.trim(), collapsedPaths, expandedPaths)}</div>`;
+}
+
+function tableRows(node, path = '$', label = '$', depth = 0, query = '', rows = []) {
   const entries = children(node);
   const value = entries.length
     ? `${node.type === 'object' ? '对象' : '数组'} · ${entries.length} 项`
     : valueText(node);
-  const ownMatch =
-    !query ||
-    `${label} ${path} ${typeName(node)} ${value}`.toLowerCase().includes(query.toLowerCase());
-  const nested = entries
-    .map(([key, child]) =>
-      toTableRows(child, node.type === 'array' ? `${path}[${key}]` : `${path}.${key}`, key, query),
+  const searchText = `${label} ${path} ${typeName(node)} ${value}`.toLowerCase();
+  if (!query || searchText.includes(query.toLowerCase())) {
+    rows.push({ path, field: label, kind: typeName(node), value, depth });
+  }
+  for (const [key, child] of entries) {
+    const childPath = node.type === 'array' ? `${path}[${key}]` : `${path}.${key}`;
+    tableRows(child, childPath, key, depth + 1, query, rows);
+  }
+  return rows;
+}
+
+export function renderTable(
+  root,
+  selectedPath = '$',
+  query = '',
+  sort = { key: 'path', direction: 'asc' },
+) {
+  const rows = tableRows(root, '$', '$', 0, query.trim());
+  const direction = sort.direction === 'desc' ? -1 : 1;
+  rows.sort(
+    (left, right) =>
+      String(left[sort.key]).localeCompare(String(right[sort.key]), undefined, {
+        numeric: true,
+        sensitivity: 'base',
+      }) * direction,
+  );
+  const columns = [
+    ['path', '路径'],
+    ['field', '字段'],
+    ['kind', '类型'],
+    ['value', '值 / 子项'],
+  ];
+  const headings = columns
+    .map(([key, title]) => {
+      const active = sort.key === key;
+      const indicator = active ? (sort.direction === 'desc' ? '↓' : '↑') : '';
+      return `<th scope="col" aria-sort="${active ? (sort.direction === 'desc' ? 'descending' : 'ascending') : 'none'}"><button type="button" class="data-table-sort ${active ? 'active' : ''}" data-table-sort="${key}">${title}<span aria-hidden="true">${indicator}</span></button></th>`;
+    })
+    .join('');
+  const body = rows
+    .map(
+      (row) =>
+        `<tr class="${row.path === selectedPath ? 'selected' : ''}" data-path="${escapeHtml(row.path)}"><td class="data-table-path">${escapeHtml(row.path)}</td><td class="data-table-field" style="--row-depth:${row.depth}">${escapeHtml(row.field)}</td><td><span class="data-table-type type-${row.kind}">${escapeHtml(row.kind)}</span></td><td class="data-table-value">${escapeHtml(row.value)}</td></tr>`,
     )
-    .filter(Boolean);
-  if (!ownMatch && !nested.length) return null;
-  return { path, field: label, kind: typeName(node), value, _children: nested };
+    .join('');
+  return `<div class="data-table-wrap"><table class="data-table"><thead><tr>${headings}</tr></thead><tbody>${body || '<tr><td class="data-table-empty" colspan="4">没有匹配的字段</td></tr>'}</tbody></table></div>`;
 }

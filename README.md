@@ -9,7 +9,7 @@ JSON Atlas is a free, open-source data workbench for inspecting, formatting, com
 - **Input formats:** JSON, JSONL, NDJSON, YAML, TOML, CSV, and JSON values embedded in mixed log text.
 - **Nested JSON expansion:** recursively expands strings containing a complete JSON object or array, up to a configurable depth. Text that merely contains braces stays text.
 - **Lossless JSON numbers:** preserves the original spelling of large and high precision JSON numbers during parsing and JSON output.
-- **Linked views:** inspect the same parsed document as a relationship graph, tree, recursive table, path columns, formatted source, or original source.
+- **Linked views:** inspect the same parsed document in a relationship graph, tree, or recursive table. The graph and editable path panel appear together; the source pane keeps the editable original input above the editable formatted content.
 - **Document comparison:** edit two documents side by side and view their merged structure with additions, removals, and changes highlighted. Scrolling is synchronized.
 - **Conversion:** format or compact JSON, sort object keys, and export JSON, JSONL, YAML, TOML, CSV, or TypeScript types where the target format supports the data.
 - **Appearance:** system, light, and dark themes. The selected theme is shared by the landing page and workbench.
@@ -41,11 +41,11 @@ The public demo is hosted on GitHub Pages: <https://ice-pure-water.github.io/jso
 
 1. Paste data into the editor, load the example, or import a local file. Imported file extensions select the input format.
 2. The editor formats valid input automatically. Choose another format in the format selector to convert the current document where conversion is supported.
-3. Switch among the graph, tree, table, and editor views. The graph supports horizontal and vertical layouts; edit primitive values and object keys in place, click a nested value to open its card, and click that card's header to return to its parent. Graph edits update the source editors and path view.
-4. Open **比较文档** to compare another document. On first open, the current document is copied into the comparison editor as a starting point; replace or edit it to see differences. It follows the current document's format. The right pane displays the merged result and highlights changes; scrolling across all three panes stays synchronized.
-5. Open **转换格式** for compact JSON, sorted JSON, CSV, YAML, TOML, or TypeScript output.
+3. Switch among graph, tree, and table using the result-pane tabs. The graph supports horizontal and vertical layouts; edit primitive values and object keys in place, click a nested value to open its card, and click that card's header to return to its parent. Graph and path edits update both source editors.
+4. Select **比较** to compare another document. On first open, the current document is copied into the comparison editor as a starting point; replace or edit it to see differences. It follows the current document's format. The third pane displays the merged result and highlights changes; scrolling across all three panes stays synchronized. Select **返回查看** in the same toolbar location to leave comparison mode.
+5. Select **转换** for compact JSON, sorted JSON, CSV, YAML, TOML, or TypeScript output.
 
-The original input editor preserves the entered or imported text and remains editable. Valid changes are automatically parsed into the formatted editor after a short pause; the formatted editor can also be edited independently. Clearing a document clears both editors.
+The original input editor preserves the entered or imported text and remains editable. Valid changes are automatically parsed into the formatted editor after a short pause; the formatted editor can also be edited independently. Clearing a document clears both editors. The two editors are vertically resizable, and the original-input pane can be collapsed.
 
 ## Supported format behavior
 
@@ -65,7 +65,13 @@ Nested expansion applies after parsing. It only expands a string when its trimme
 ```text
 src/
   core.js             Parsing, lossless JSON model, expansion, serialization, flattening, diff
-  main.js             Workbench state, editors, views, import/export, and comparison UI
+  main.js             Workbench browser entry point
+  workbench/
+    app.js            Workbench state, editors, views, import/export, and comparison UI
+    shell.js          Workbench structure and controls
+    data-views.js     Tree, table, path mapping, and path updates
+    diff-renderer.js  Format-aware difference display
+    formatting.js     Formatting, parsing, and format conversion
   graph.js            React Flow relationship graph and navigation
   landing.js          Introduction page and shared theme preference
   style.css           Shared base and component styles
@@ -112,7 +118,7 @@ JSON Atlas 是免费的开源结构化数据工作台，用于查看、整理、
 - **输入格式：** JSON、JSONL、NDJSON、YAML、TOML、CSV，以及混合日志中的 JSON 数据提取。
 - **嵌套 JSON 展开：** 递归展开完整 JSON 对象或数组字符串，最大深度可调整。普通文本中仅包含花括号时会保留原文。
 - **精确保留 JSON 数字：** 解析和 JSON 导出时保留大整数及高精度数字的原始文本，避免 JavaScript 数值精度损失。
-- **多种联动视图：** 关系图与可编辑路径并排联动，也可切换树形、递归表格或编辑器视图。编辑器上下展示格式化源码和可折叠的只读原始源码。
+- **多种联动视图：** 在关系图、树形和递归表格间切换。关系图与可编辑路径上下联动；左侧源码区上方是可编辑原始输入，下方是可编辑格式化内容。
 - **文档比较：** 并排编辑两份文档，在融合结果中标记新增、删除和修改；三个区域支持滚动同步。
 - **格式转换：** 格式化或压缩 JSON、排序对象键，并按目标格式能力导出 JSON、JSONL、YAML、TOML、CSV 或 TypeScript 类型。
 - **三种主题：** 跟随系统、浅色和深色。主页和工作台共用主题设置。
@@ -143,11 +149,11 @@ npm run preview # 本地预览生产构建
 
 1. 在编辑器粘贴数据、载入示例或导入本地文件。导入时根据文件扩展名选择输入格式。
 2. 有效输入会自动格式化。也可以在格式选择器中选择其他格式，对当前文档进行支持范围内的转换。
-3. 在关系图、树形、表格和编辑器视图间切换。关系图与路径导航同步展示，支持横向和纵向布局；可直接修改关系图卡片里的对象键名和基本值，也可在路径面板编辑字段名和值。点击嵌套值进入下级卡片，点击卡片表头返回父级；修改会同步到两个源码编辑区和其他视图。
-4. 点击**比较文档**对照另一份文档。首次打开时，会将当前文档复制到对比编辑区作为起点；随后可直接替换或修改内容查看差异。对比格式跟随当前文档。右侧显示合并后的结构并标出差异；三个区域支持滚动同步。
-5. 点击**转换格式**，可生成压缩 JSON、键排序后的 JSON、CSV、YAML、TOML 或 TypeScript 类型。
+3. 在关系图、树形和表格间切换。关系图与路径面板上下同步展示，支持横向和纵向布局；可直接修改图卡或路径中的字段名和值。点击嵌套值进入下级卡片，点击卡片表头返回父级；修改会同步到两个源码编辑区和其他视图。
+4. 点击**比较**对照另一份文档。首次打开时，会将当前文档复制到对比编辑区作为起点；随后可直接替换或修改内容查看差异。对比格式跟随当前文档。第三个区域显示融合结果并标出差异；三个区域支持滚动同步。点击同一位置的**返回查看**回到之前的数据视图。
+5. 点击**转换**，可生成压缩 JSON、键排序后的 JSON、CSV、YAML、TOML 或 TypeScript 类型。
 
-编辑器视图上方是可编辑的格式化内容，下方是可折叠的原始输入编辑器。原始输入会保留录入或导入的文本；有效内容修改后会自动解析并更新格式化内容，格式化内容也可以独立编辑。清空文档会同时清除两个编辑区。
+左侧源码区上方是可编辑的原始输入，下方是可编辑的格式化内容。原始输入会保留录入或导入的文本；有效内容修改后会自动解析并更新格式化内容。两个区域可拖动调整高度，原始输入也可折叠。清空文档会同时清除两个编辑区。
 
 ### 格式支持与行为
 
