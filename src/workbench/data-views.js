@@ -126,7 +126,7 @@ export function matchesQuery(node, path, label, query) {
   );
 }
 
-export function renderColumns(root, path = '$', query = '') {
+export function renderColumns(root, path = '$', query = '', selectedPath = path) {
   const chain =
     path === '$'
       ? []
@@ -145,7 +145,7 @@ export function renderColumns(root, path = '$', query = '') {
     });
     const items = entries.map(([key, child]) => {
       const childPath = cursor.type === 'array' ? `${current}[${key}]` : `${current}.${key}`;
-      const active = childPath === path;
+      const active = childPath === selectedPath;
       const childCount = children(child).length;
       const summary =
         child.type === 'object'
@@ -173,6 +173,7 @@ export function renderColumns(root, path = '$', query = '') {
     columns.push(
       `<div class="path-column">${items.join('') || '<span class="column-empty">没有子字段</span>'}</div>`,
     );
+    if (level === chain.length) break;
     const next = entries.find(([key]) => key === chain[level]);
     if (!next) break;
     current = cursor.type === 'array' ? `${current}[${next[0]}]` : `${current}.${next[0]}`;
