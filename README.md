@@ -167,9 +167,18 @@ npm run preview # 本地预览生产构建
 ```text
 src/
   core.js             解析、无损 JSON 数据模型、嵌套展开、序列化、扁平化和差异计算
-  main.js             工作台状态、编辑器、视图、导入导出和比较界面
+  main.js             工作台浏览器入口
+  shared/theme.js     主页与工作台共用的主题偏好控制器
+  workbench/
+    app.js            工作台状态编排、编辑器接线、导入导出和交互
+    shell.js          工作台结构与控件标记
+    data-views.js     树、表格、路径视图的数据映射
+    diff-renderer.js  按文档格式生成差异视图
+    formatting.js     文档格式化、解析与格式转换
+  landing/
+    shell.js          主页结构与产品介绍内容
   graph.js            React Flow 关系图和节点导航
-  landing.js          产品介绍页和共享主题设置
+  landing.js          主页浏览器入口
   style.css           共享基础与组件样式
   editor-shell.css    工作台布局和主题样式
   graph.css           关系图样式
