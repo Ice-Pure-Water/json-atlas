@@ -2,6 +2,8 @@ import { defineConfig } from 'vite';
 import { resolve } from 'node:path';
 
 export default defineConfig({
+  // Relative asset URLs support both local hosting and the GitHub Pages project path.
+  base: './',
   build: {
     rollupOptions: {
       input: {

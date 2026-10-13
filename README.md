@@ -1,6 +1,6 @@
 # JSON Atlas
 
-[English](#json-atlas) · [简体中文](#中文文档) · [GitHub](https://github.com/Ice-Pure-Water/json-atlas) · [MIT License](LICENSE)
+[Live demo](https://ice-pure-water.github.io/json-atlas/) · [English](#json-atlas) · [简体中文](#中文文档) · [GitHub](https://github.com/Ice-Pure-Water/json-atlas) · [MIT License](LICENSE)
 
 JSON Atlas is a free, open-source data workbench for inspecting, formatting, comparing, and converting structured data. It runs in the browser and does not require an account. Parsing and editing stay on the device; the project has no upload, cloud-save, or sharing service.
 
@@ -34,6 +34,8 @@ npm run preview # serve the production build locally
 ```
 
 The static files in `dist/` can be deployed to any static host. The host serves the application files; it does not receive document contents through application requests.
+
+The public demo is hosted on GitHub Pages: <https://ice-pure-water.github.io/json-atlas/>. Every push to `main` builds and deploys `dist/` through the `Deploy GitHub Pages` workflow. The build uses relative asset paths so both the landing page and `/workspace.html` work under the repository subpath.
 
 ## Using the workbench
 
@@ -125,7 +127,7 @@ npm install
 npm run dev
 ```
 
-打开 Vite 输出的本地地址。根路径为产品介绍页，数据处理工作台位于 `/workspace.html`。
+打开 Vite 输出的本地地址。根路径为产品介绍页，数据处理工作台位于 `workspace.html`。在线版本通过 [GitHub Pages](https://ice-pure-water.github.io/json-atlas/) 访问；每次推送到 `main` 都会自动构建并部署 `dist/`。
 
 ```sh
 npm test       # 核心解析、展开、转换和比较测试
@@ -134,6 +136,8 @@ npm run preview # 本地预览生产构建
 ```
 
 `dist/` 中的静态文件可以部署到任意静态网站托管服务。托管服务负责提供应用文件，应用不会通过请求上传文档内容。
+
+公开体验网址：<https://ice-pure-water.github.io/json-atlas/>。构建采用相对资源路径，因此项目站点部署在仓库子路径下时，主页和 `workspace.html` 仍可正常访问。
 
 ### 工作台使用方法
 

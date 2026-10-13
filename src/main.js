@@ -67,7 +67,7 @@ const state = {
 $('#app').innerHTML = `
   <div class="editor-shell">
     <aside class="app-sidebar">
-      <div class="sidebar-brand-row"><a class="brand" href="/" aria-label="JSON Atlas 首页"><span class="brand-mark">J</span><span>json<span class="brand-accent">atlas</span></span></a><a class="sidebar-home" href="/" title="介绍页">↗</a></div>
+      <div class="sidebar-brand-row"><a class="brand" href="./" aria-label="JSON Atlas 首页"><span class="brand-mark">J</span><span>json<span class="brand-accent">atlas</span></span></a><a class="sidebar-home" href="./" title="介绍页">↗</a></div>
       <nav class="sidebar-nav" aria-label="工具">
         <button id="editor-view-toggle" class="sidebar-action active"><span class="nav-icon">✧</span>整理 JSON</button>
         <div class="sidebar-divider"></div>
@@ -87,7 +87,7 @@ $('#app').innerHTML = `
         <section class="result-panel"><div class="browser-toolbar"><div class="breadcrumbs" id="crumbs"><span class="crumb-root" data-path="$">$</span></div><div class="toolbar-actions"><input id="search" class="search" placeholder="⌕  搜索字段或路径"/><button id="copy-output" title="复制结果">复制</button><button id="download-output" title="导出展开结果">导出结果</button></div></div><div class="viewer" id="viewer"><div class="empty-state"><div class="empty-icon">⌘</div><strong>准备好探索你的数据</strong><span>在左侧粘贴数据，或载入示例开始。</span></div></div><div class="canvas-status"><span id="stats">—</span><span class="canvas-status-right"><i></i>本机处理</span></div></section>
       </section>
       <section id="convert-panel" class="utility-panel panel hidden"><div class="utility-head"><div><span class="step">03</span><strong>转换与整理</strong></div><button class="close-button" data-close="convert">×</button></div><div class="convert-actions"><button data-action="minify">压缩 JSON</button><button data-action="sort">按键排序</button><button data-action="csv">导出 CSV</button><button data-action="yaml">转为 YAML</button><button data-action="toml">转为 TOML</button><button data-action="types">生成 TypeScript 类型</button></div><textarea id="convert-output" class="convert-output" readonly placeholder="转换结果会显示在这里"></textarea><div class="utility-actions"><button id="copy-convert" class="button button-dark">复制结果</button><button id="download-convert" class="button button-quiet">下载结果</button></div></section>
-      <div class="document-dock"><div class="document-tabs" id="document-tabs"></div><button class="dock-add" id="add-tab" title="新建文档">＋</button><a href="/" class="dock-home">JSON Atlas · 开源 · 本地优先</a></div>
+      <div class="document-dock"><div class="document-tabs" id="document-tabs"></div><button class="dock-add" id="add-tab" title="新建文档">＋</button><a href="./" class="dock-home">JSON Atlas · 开源 · 本地优先</a></div>
     </main>
   </div>`;
 

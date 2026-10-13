@@ -4,8 +4,8 @@ import './landing-theme.css';
 
 document.querySelector('#landing').innerHTML = `
   <header class="landing-nav">
-    <a class="brand" href="/"><span class="brand-mark">J</span><span>json<span class="brand-accent">atlas</span></span></a>
-    <nav><a href="#features">功能</a><a href="#privacy">隐私</a><label class="landing-theme-control"><span>主题</span><select id="landing-theme-select" aria-label="选择主题"><option value="system">跟随系统</option><option value="light">浅色</option><option value="dark">深色</option></select></label><a class="button button-dark" href="/workspace.html">打开工作台 <span>↗</span></a></nav>
+    <a class="brand" href="./"><span class="brand-mark">J</span><span>json<span class="brand-accent">atlas</span></span></a>
+    <nav><a href="#features">功能</a><a href="#privacy">隐私</a><label class="landing-theme-control"><span>主题</span><select id="landing-theme-select" aria-label="选择主题"><option value="system">跟随系统</option><option value="light">浅色</option><option value="dark">深色</option></select></label><a class="button button-dark" href="./workspace.html">打开工作台 <span>↗</span></a></nav>
   </header>
   <main class="landing-main">
     <section class="landing-hero">
@@ -13,7 +13,7 @@ document.querySelector('#landing').innerHTML = `
         <div class="eyebrow"><span class="status-dot"></span> 免费 · 开源 · 本地优先</div>
         <h1>把复杂数据，<br/><em>看清楚。</em></h1>
         <p>展开嵌套 JSON，在源码、结构表格、关系图和路径之间自由切换。无需账号，数据只在你的设备上处理。</p>
-        <div class="landing-actions"><a class="button button-dark button-large" href="/workspace.html">开始处理数据 <span>→</span></a><a class="landing-secondary" href="#features">了解功能 <span>↓</span></a></div>
+        <div class="landing-actions"><a class="button button-dark button-large" href="./workspace.html">开始处理数据 <span>→</span></a><a class="landing-secondary" href="#features">了解功能 <span>↓</span></a></div>
         <div class="landing-proof"><span>✓ 支持大整数精确解析</span><span>✓ 递归展开字符串 JSON</span><span>✓ JSON / YAML / TOML / CSV</span></div>
       </div>
       <div class="landing-preview" aria-label="关系图预览">
@@ -34,10 +34,10 @@ document.querySelector('#landing').innerHTML = `
         <article class="feature-card feature-wide"><span class="feature-index">01 / EXPLORE</span><div class="feature-icon">⌘</div><h3>沿着关系读懂嵌套结构</h3><p>对象用字段卡片呈现，嵌套对象通过连线展开，数组以表格形式显示。缩放、拖动，快速定位数据。</p><div class="feature-tags"><span>关系图</span><span>树形表格</span><span>路径导航</span></div></article>
         <article class="feature-card"><span class="feature-index">02 / EXPAND</span><div class="feature-icon">{ }</div><h3>递归解析字符串 JSON</h3><p>自动展开多层字符串化 JSON，普通文字中的花括号保持原样。</p></article>
         <article class="feature-card"><span class="feature-index">03 / CONVERT</span><div class="feature-icon">⇄</div><h3>格式化、比较与转换</h3><p>整理和压缩 JSON，比较结构差异，转换 JSON、YAML、TOML 与 CSV。</p></article>
-        <article class="feature-card feature-privacy" id="privacy"><span class="feature-index">04 / PRIVATE</span><div class="feature-icon">◉</div><h3>数据留在你的设备</h3><p>解析与展示都在浏览器中完成，不需要账号，也不上传数据。</p><a href="/workspace.html">在本地开始使用　→</a></article>
+        <article class="feature-card feature-privacy" id="privacy"><span class="feature-index">04 / PRIVATE</span><div class="feature-icon">◉</div><h3>数据留在你的设备</h3><p>解析与展示都在浏览器中完成，不需要账号，也不上传数据。</p><a href="./workspace.html">在本地开始使用　→</a></article>
       </div>
     </section>
-    <section class="landing-cta"><div><div class="eyebrow">READY WHEN YOU ARE</div><h2>现在就把数据看清楚。</h2><p>免费使用，打开即用。</p></div><a class="button button-dark button-large" href="/workspace.html">打开 JSON Atlas <span>→</span></a></section>
+    <section class="landing-cta"><div><div class="eyebrow">READY WHEN YOU ARE</div><h2>现在就把数据看清楚。</h2><p>免费使用，打开即用。</p></div><a class="button button-dark button-large" href="./workspace.html">打开 JSON Atlas <span>→</span></a></section>
   </main>
   <footer class="landing-footer"><span><b>JSON ATLAS</b>　·　开源　·　本地优先</span><span>MIT License</span></footer>
 `;
