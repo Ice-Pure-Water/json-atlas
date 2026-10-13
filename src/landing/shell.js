@@ -33,7 +33,7 @@ export function mountLandingShell(root) {
         <div class="preview-caption"><span>结构关系一目了然</span><span>拖动 · 缩放 · 搜索</span></div>
       </div>
     </section>
-    <section class="landing-stats"><div><strong>5 种</strong><span>数据格式</span></div><div><strong>100%</strong><span>浏览器本地处理</span></div><div><strong>MIT</strong><span>开源许可</span></div><div><strong>0</strong><span>账号与云端保存</span></div></section>
+    <section class="landing-stats"><div><strong>7 种</strong><span>输入格式</span></div><div><strong>100%</strong><span>浏览器本地处理</span></div><div><strong>MIT</strong><span>开源许可</span></div><div><strong>0</strong><span>账号与云端保存</span></div></section>
     <section class="feature-section" id="features">
       <div class="feature-intro"><div class="eyebrow">A CLEARER WAY TO READ DATA</div><h2>一个文档，<em>多种视角。</em></h2><p>浏览、搜索和整理结构化数据，不必在几个工具之间来回搬运。</p></div>
       <div class="feature-grid">

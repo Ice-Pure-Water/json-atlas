@@ -25,7 +25,7 @@ export function mountThemeControls({
     });
     document
       .querySelector('meta[name="theme-color"]')
-      ?.setAttribute('content', dark ? '#171c19' : '#f4f5f2');
+      ?.setAttribute('content', dark ? '#111714' : '#f7f9fb');
   };
 
   const onSelect = () => apply(select.value);

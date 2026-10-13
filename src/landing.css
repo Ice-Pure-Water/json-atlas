@@ -536,3 +536,127 @@
     padding: 16px 0;
   }
 }
+
+/* Shared cool-neutral visual language with the JSONCrack-inspired editor. */
+.landing-page {
+  background: #f7f9fb;
+  color: #1e2a35;
+}
+.landing-nav {
+  width: min(1360px, 92vw);
+  height: 62px;
+  border-color: #e0e6ec;
+}
+.landing-main {
+  width: min(1360px, 92vw);
+}
+.landing-nav .brand-mark {
+  background: #d8ecff;
+  color: #185b8c;
+}
+.landing-nav .brand-accent {
+  color: #61839d;
+}
+.landing-copy .eyebrow,
+.landing-secondary,
+.preview-caption span:first-child {
+  color: #3979a4;
+}
+.landing-copy h1 em,
+.feature-intro h2 em {
+  color: #438bb8;
+}
+.status-dot {
+  background: #4d9bc8;
+  box-shadow: 0 0 0 4px #e5f2fa;
+}
+.button-dark {
+  background: #1f3547;
+  border-color: #1f3547;
+}
+.landing-preview {
+  border-color: #dce5ec;
+  box-shadow: 0 20px 55px #20384a0d;
+}
+.preview-canvas {
+  background-image:
+    linear-gradient(#e8eef3 1px, transparent 1px),
+    linear-gradient(90deg, #e8eef3 1px, transparent 1px);
+}
+.preview-card {
+  border-color: #d8e4ec;
+}
+.preview-card > div strong {
+  color: #2879aa;
+}
+.preview-edge {
+  background: #8fb8d0;
+}
+.landing-stats,
+.landing-footer {
+  border-color: #e0e6ec;
+}
+.feature-card {
+  border-color: #dfe6ec;
+  background: #fff;
+}
+.feature-card:hover {
+  border-color: #bad6e8;
+  box-shadow: 0 10px 30px #254b6410;
+}
+.feature-icon {
+  color: #3986b1;
+  background: #edf6fb;
+}
+body.theme-dark.landing-page {
+  background: #111714;
+  color: #e3e9e4;
+}
+body.theme-dark .landing-nav,
+body.theme-dark .landing-stats,
+body.theme-dark .landing-footer {
+  border-color: #303b34;
+}
+body.theme-dark .landing-preview,
+body.theme-dark .feature-card {
+  background: #171e1a;
+  border-color: #303b34;
+}
+body.theme-dark .preview-canvas {
+  background-color: #141a16;
+  background-image:
+    linear-gradient(#222c25 1px, transparent 1px),
+    linear-gradient(90deg, #222c25 1px, transparent 1px);
+}
+body.theme-dark .preview-card {
+  background: #1b241e;
+  border-color: #344337;
+}
+body.theme-dark .preview-card > b {
+  color: #dbe6dc;
+  border-color: #303b34;
+}
+body.theme-dark .preview-card > div strong {
+  color: #9cc9e2;
+}
+body.theme-dark .preview-caption,
+body.theme-dark .preview-toolbar {
+  border-color: #303b34;
+  color: #9eaca1;
+}
+body.theme-dark .landing-copy > p,
+body.theme-dark .feature-card p,
+body.theme-dark .landing-stats span,
+body.theme-dark .landing-footer {
+  color: #a5b0a8;
+}
+body.theme-dark .landing-copy h1 em,
+body.theme-dark .feature-intro h2 em {
+  color: #85bce0;
+}
+@media (max-width: 720px) {
+  .landing-nav,
+  .landing-main {
+    width: min(100% - 32px, 600px);
+  }
+}
