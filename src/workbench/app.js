@@ -11,15 +11,12 @@ import { stringify as stringifyToml } from 'smol-toml';
 import YAML from 'yaml';
 import Papa from 'papaparse';
 import * as LosslessJSON from 'lossless-json';
-import { TabulatorFull as Tabulator } from 'tabulator-tables';
-import 'tabulator-tables/dist/css/tabulator.min.css';
 import { basicSetup } from 'codemirror';
 import { json } from '@codemirror/lang-json';
 import { yaml } from '@codemirror/lang-yaml';
 import { Compartment, EditorState } from '@codemirror/state';
 import { EditorView, keymap, placeholder } from '@codemirror/view';
 import { indentWithTab } from '@codemirror/commands';
-import { mountGraph } from '../graph.js';
 import { mountThemeControls } from '../shared/theme.js';
 import { mountWorkspaceShell } from './shell.js';
 import { countNodes, findPath, renderColumns, toTableRows } from './data-views.js';
@@ -208,6 +205,8 @@ const compareInputPanel = $('#compare-input-panel');
 let jsonEditor = null;
 let resultCodeView = null;
 let dataTable = null;
+let tableModulePromise;
+let graphModulePromise;
 let graphCleanup = null;
 let editorModulePromise;
 const formatLabel = (format) =>
@@ -449,38 +448,59 @@ function render() {
     return;
   } else if (mode === 'table') {
     viewer.innerHTML = '<div class="table-view-host"></div>';
-    dataTable = new Tabulator(viewer.firstElementChild, {
-      data: [toTableRows(state.shown, '$', '$', state.query)].filter(Boolean),
-      dataTree: true,
-      dataTreeStartExpanded: true,
-      dataTreeChildField: '_children',
-      layout: 'fitColumns',
-      height: '100%',
-      placeholder: '没有匹配的字段',
-      columns: [
-        { title: '路径', field: 'path', minWidth: 180, widthGrow: 2 },
-        { title: '字段', field: 'field', minWidth: 110 },
-        { title: '类型', field: 'kind', width: 88 },
-        { title: '值 / 子项', field: 'value', minWidth: 160, widthGrow: 2 },
-      ],
-      rowClick: (_event, row) => {
-        state.selected = row.getData().path;
-        updateCrumbs();
-      },
-    });
+    const host = viewer.firstElementChild;
+    tableModulePromise ??= Promise.all([
+      import('tabulator-tables'),
+      import('tabulator-tables/dist/css/tabulator.min.css'),
+    ]);
+    tableModulePromise
+      .then(([{ TabulatorFull }]) => {
+        if (!host.isConnected || state.mode !== 'table' || !state.shown) return;
+        dataTable = new TabulatorFull(host, {
+          data: [toTableRows(state.shown, '$', '$', state.query)].filter(Boolean),
+          dataTree: true,
+          dataTreeStartExpanded: true,
+          dataTreeChildField: '_children',
+          layout: 'fitColumns',
+          height: '100%',
+          placeholder: '没有匹配的字段',
+          columns: [
+            { title: '路径', field: 'path', minWidth: 180, widthGrow: 2 },
+            { title: '字段', field: 'field', minWidth: 110 },
+            { title: '类型', field: 'kind', width: 88 },
+            { title: '值 / 子项', field: 'value', minWidth: 160, widthGrow: 2 },
+          ],
+          rowClick: (_event, row) => {
+            state.selected = row.getData().path;
+            updateCrumbs();
+          },
+        });
+      })
+      .catch((error) => {
+        if (host.isConnected) host.textContent = `表格视图加载失败：${error.message}`;
+      });
   } else if (mode === 'graph') {
     viewer.innerHTML = '<div class="graph-view-host"></div>';
-    graphCleanup = mountGraph(
-      viewer.firstElementChild,
-      state.shown,
-      state.selected,
-      state.query,
-      (path) => {
-        state.selected = path;
-        updateCrumbs();
-      },
-      state.graphDirection,
-    );
+    const host = viewer.firstElementChild;
+    graphModulePromise ??= import('../graph.js');
+    graphModulePromise
+      .then(({ mountGraph }) => {
+        if (!host.isConnected || state.mode !== 'graph' || !state.shown) return;
+        graphCleanup = mountGraph(
+          host,
+          state.shown,
+          state.selected,
+          state.query,
+          (path) => {
+            state.selected = path;
+            updateCrumbs();
+          },
+          state.graphDirection,
+        );
+      })
+      .catch((error) => {
+        if (host.isConnected) host.textContent = `关系图加载失败：${error.message}`;
+      });
   } else if (mode === 'tree') {
     viewer.innerHTML = '<div class="json-editor-host"></div>';
     const host = viewer.firstElementChild;
